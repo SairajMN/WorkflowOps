@@ -1,13 +1,13 @@
-import osn
-HF_TOKEN = os.getenv("HF_TOKEN")n
-if HF_TOKEN is None:n
-    raise ValueError("HF_TOKEN environment variable is required")n
+import os
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
 from fastapi.responses import RedirectResponse
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPExceptio
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict, Any
-import uvicorn
+import uvicor
 
 from tasks.email_triage import EmailTriageTask
 from tasks.support_ticket import SupportTicketTask
