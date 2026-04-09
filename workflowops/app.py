@@ -1,3 +1,7 @@
+import osn
+HF_TOKEN = os.getenv("HF_TOKEN")n
+if HF_TOKEN is None:n
+    raise ValueError("HF_TOKEN environment variable is required")n
 from fastapi.responses import RedirectResponse
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -59,7 +63,7 @@ async def reset_environment(task_name: str):
     
     return {
         "episode_id": env.state.episode_id,
-        "observation": observation.dict()
+        "observation": observation.model_dump()
     }
 
 
@@ -75,7 +79,7 @@ async def step_environment(request: ActionRequest):
     if observation.done:
         del active_envs[request.episode_id]
     
-    return observation.dict()
+    return observation.model_dump()
 
 
 if __name__ == "__main__":
