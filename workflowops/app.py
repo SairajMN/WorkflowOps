@@ -47,6 +47,7 @@ async def ready():
 
 
 @app.post("/env/{task_name}/reset")
+@app.post("/{task_name}/reset")
 async def reset_environment(task_name: str):
     if task_name not in TASKS:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -63,6 +64,7 @@ async def reset_environment(task_name: str):
 
 
 @app.post("/env/step")
+@app.post("/step")
 async def step_environment(request: ActionRequest):
     if request.episode_id not in active_envs:
         raise HTTPException(status_code=404, detail="Episode not found")
