@@ -613,7 +613,7 @@
 
         async function loadDatasetInfo() {
             try {
-                const res = await fetch('/dataset');
+                const res = await fetch('/datasets');
                 const data = await res.json();
                 
                 document.getElementById('task-value').textContent = data.task_id || '-';
@@ -850,7 +850,7 @@
 
         async function showSampleData() {
             try {
-                const res = await fetch('/dataset');
+                const res = await fetch('/datasets');
                 const data = await res.json();
                 
                 if (!data.columns || data.columns.length === 0) {

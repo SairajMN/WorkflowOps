@@ -121,6 +121,10 @@ class DataCleaningEnvironment(Environment[DataCleaningAction, DataCleaningObserv
         self.consecutive_repeated_actions: int = 0
         self.early_stop_reason: Optional[str] = None
         
+        # Performance metrics
+        self.last_step_time: Optional[float] = None
+        self.episode_start_time: Optional[float] = None
+        
         # Task state
         self.current_task_id: str = ""
         self.current_difficulty: str = "intermediate"
@@ -211,7 +215,7 @@ class DataCleaningEnvironment(Environment[DataCleaningAction, DataCleaningObserv
         self.last_step_time = current_time
 
         if self.df is None:
-            return self._end_episode()
+            return self._create_error_observation("No active dataset. Call /reset first.")
 
         # Handle submit action
         if action.action_type == CleaningActionType.SUBMIT:
