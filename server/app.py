@@ -17,8 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
 
-from models import HallucinationAction, HallucinationObservation, HallucinationState
-from environment import HallucinationEnvironment
+from models import DataCleaningAction, DataCleaningObservation, DataCleaningState
+from environment import DataCleaningEnvironment
 from metrics import get_tracker
 
 from tasks import (
