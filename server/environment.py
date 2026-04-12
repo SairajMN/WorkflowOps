@@ -88,7 +88,8 @@ class DataCleaningEnvironment(Environment[DataCleaningAction, DataCleaningObserv
         transform=None,
         config: Optional[EnvironmentConfig] = None,
         session_id: Optional[str] = None,
-        dataset_generator: Optional["DatasetGenerator"] = None
+        dataset_generator: Optional["DatasetGenerator"] = None,
+        dataset_loader: Optional["DatasetGenerator"] = None
     ):
         super().__init__(transform=transform)
 
@@ -96,8 +97,9 @@ class DataCleaningEnvironment(Environment[DataCleaningAction, DataCleaningObserv
         self.config = config or EnvironmentConfig()
         self.session_id = session_id or str(uuid.uuid4())[:8]
 
-        # Dataset management
-        self.dataset_generator = dataset_generator or DatasetGenerator()
+        # Dataset management (support both parameter names for backwards compatibility)
+        self.dataset_generator = dataset_generator or dataset_loader or DatasetGenerator()
+        self.dataset_loader = self.dataset_generator
         
         # Episode state
         self.episode_id: Optional[str] = None

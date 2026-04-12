@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenEnv Data Cleaner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #475569;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+
+        .status-item {
+            background: var(--bg-card);
+            padding: 15px 25px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            min-width: 150px;
+            text-align: center;
+        }
+
+        .status-item .label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-item .value {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        .status-item .value.healthy { color: var(--success); }
+        .status-item .value.warning { color: var(--warning); }
+        .status-item .value.error { color: var(--danger); }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h3 .icon {
+            font-size: 1.3rem;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        select {
+            background: var(--bg-input);
+            color: var(--text);
+            margin-bottom: 12px;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+            border: none;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+            border: none;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+            border: none;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: var(--bg-input);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .action-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .action-btn {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        .action-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .action-btn:disabled:hover {
+            background: var(--bg-input);
+            border-color: var(--border);
+        }
+
+        .dataset-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .dataset-table th,
+        .dataset-table td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dataset-table th {
+            background: var(--bg-input);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .dataset-table tr:hover {
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .null-count {
+            color: var(--warning);
+            font-weight: 600;
+        }
+
+        .log-container {
+            background: var(--bg-input);
+            border-radius: 10px;
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry .timestamp {
+            color: var(--text-muted);
+            margin-right: 10px;
+        }
+
+        .log-entry .action {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .log-entry .reward {
+            color: var(--success);
+        }
+
+        .log-entry .error {
+            color: var(--danger);
+        }
+
+        .param-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .param-form label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .param-form input,
+        .param-form select {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+
+        .param-form input:focus,
+        .param-form select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid var(--border);
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        .score-display {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .score-display .score {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .score-display .label {
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--text-muted);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .task-info {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+
+        .task-info .difficulty {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .difficulty.easy { background: var(--success); color: white; }
+        .difficulty.medium { background: var(--warning); color: white; }
+        .difficulty.hard { background: var(--danger); color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>OpenEnv Data Cleaner</h1>
+            <p>AI-powered data cleaning environment with reinforcement learning</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="label">Status</div>
+                <div class="value" id="status-value">-</div>
+            </div>
+            <div class="status-item">
+                <div class="label">Task</div>
+                <div class="value" id="task-value">-</div>
+            </div>
+            <div class="status-item">
+                <div class="label">Steps</div>
+                <div class="value" id="step-value">0</div>
+            </div>
+            <div class="status-item">
+                <div class="label">Reward</div>
+                <div class="value" id="reward-value">0.00</div>
+            </div>
+            <div class="status-item">
+                <div class="label">Score</div>
+                <div class="value" id="score-value">-</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="sidebar">
+                <div class="card">
+                    <h3><span class="icon">📋</span> Task Selection</h3>
+                    <select id="task-select">
+                        <option value="employee_demo">📊 Employee Dataset - Demo</option>
+                        <option value="easy_001">Easy - Basic Cleaning</option>
+                        <option value="medium_001">Medium - Intermediate</option>
+                        <option value="hard_001">Hard - Advanced Pipeline</option>
+                    </select>
+                    <button class="btn-primary" onclick="resetEnvironment()">
+                        <span>🔄</span> Start New Task
+                    </button>
+                    <div class="task-info" id="task-info"></div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">🔧</span> Actions</h3>
+                    <div class="action-list" id="action-list">
+                        <button class="action-btn" onclick="showActionModal('drop_nulls')">Drop Nulls</button>
+                        <button class="action-btn" onclick="showActionModal('fill_nulls')">Fill Nulls</button>
+                        <button class="action-btn" onclick="showActionModal('remove_duplicates')">Remove Duplicates</button>
+                        <button class="action-btn" onclick="showActionModal('filter_rows')">Filter Rows</button>
+                        <button class="action-btn" onclick="showActionModal('drop_columns')">Drop Columns</button>
+                        <button class="action-btn" onclick="showActionModal('convert_types')">Convert Types</button>
+                        <button class="action-btn" onclick="showActionModal('validate_email')">Validate Email</button>
+                        <button class="action-btn" onclick="showActionModal('outlier_removal')">Outlier Removal</button>
+                        <button class="action-btn" onclick="showActionModal('normalize')">Normalize</button>
+                    </div>
+                    <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+                        <button class="btn-warning" onclick="revertAction()">↩️ Revert Last</button>
+                        <button class="btn-success" onclick="submitSolution()">✅ Submit Solution</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <div class="card">
+                    <h3><span class="icon">📊</span> Dataset Information</h3>
+                    <div id="dataset-info">
+                        <p style="color: var(--text-muted);">Start a task to view dataset information.</p>
+                    </div>
+                    <table class="dataset-table hidden" id="dataset-table">
+                        <thead>
+                            <tr>
+                                <th>Column</th>
+                                <th>Type</th>
+                                <th>Null Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataset-tbody"></tbody>
+                    </table>
+                    <button class="btn-secondary" onclick="showSampleData()" style="margin-top: 12px;">
+                        <span>👁️</span> Preview Sample Data
+                    </button>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <h3><span class="icon">📝</span> Action Log</h3>
+                    <div class="log-container" id="log-container">
+                        <div class="log-entry">
+                            <span class="timestamp">--:--:--</span>
+                            <span>Waiting for task to start...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Modal -->
+    <div class="modal-overlay hidden" id="action-modal">
+        <div class="modal">
+            <h3 id="modal-title">Action Parameters</h3>
+            <div class="param-form" id="param-form"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-primary" onclick="executeAction()">Execute</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Modal -->
+    <div class="modal-overlay hidden" id="score-modal">
+        <div class="modal">
+            <div class="score-display">
+                <div class="label">Final Score</div>
+                <div class="score" id="final-score">0.00</div>
+                <div id="score-feedback" style="margin-top: 16px; color: var(--text-muted);"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="closeScoreModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentAction = null;
+        let totalReward = 0;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasks();
+        });
+
+        async function loadTasks() {
+            try {
+                const res = await fetch('/tasks');
+                const data = await res.json();
+                if (data.tasks?.length > 0) {
+                    updateTaskInfo(data.tasks[0]);
+                }
+            } catch (e) {
+                console.error('Failed to load tasks:', e);
+            }
+        }
+
+        document.getElementById('task-select').addEventListener('change', (e) => {
+            fetch(`/tasks`).then(r => r.json()).then(data => {
+                const task = data.tasks.find(t => t.task_id === e.target.value);
+                updateTaskInfo(task);
+            });
+        });
+
+        function updateTaskInfo(task) {
+            if (!task) return;
+            const info = document.getElementById('task-info');
+            info.innerHTML = `
+                <span class="difficulty ${task.difficulty}">${task.difficulty}</span>
+                <p style="margin-top: 8px;">${task.description}</p>
+                <p style="margin-top: 8px;">Expected: ${(task.expected_actions || []).join(', ')}</p>
+            `;
+        }
+
+        async function resetEnvironment() {
+            const taskId = document.getElementById('task-select').value;
+            try {
+                addLog('Starting new task...', 'info');
+                const res = await fetch('/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId })
+                });
+                const data = await res.json();
+                
+                if (data.success || data.status === 'reset_complete') {
+                    totalReward = 0;
+                    updateStatus(data);
+                    await loadDatasetInfo();
+                    addLog(`Task '${taskId}' initialized`, 'success');
+                }
+            } catch (e) {
+                addLog(`Reset failed: ${e.message}`, 'error');
+            }
+        }
+
+        async function loadDatasetInfo() {
+            try {
+                const res = await fetch('/dataset');
+                const data = await res.json();
+                
+                document.getElementById('task-value').textContent = data.task_id || '-';
+                document.getElementById('step-value').textContent = data.step_count || 0;
+                
+                const tbody = document.getElementById('dataset-tbody');
+                tbody.innerHTML = '';
+                
+                (data.columns || []).forEach(col => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${col}</td>
+                        <td>${data.dtypes?.[col] || '-'}</td>
+                        <td class="null-count">${data.null_counts?.[col] || 0}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+                document.getElementById('dataset-table').classList.remove('hidden');
+                document.getElementById('dataset-info').innerHTML = `
+                    <p>Shape: ${data.shape?.[0] || 0} rows × ${data.shape?.[1] || 0} columns</p>
+                `;
+            } catch (e) {
+                console.error('Failed to load dataset info:', e);
+            }
+        }
+
+        function showActionModal(actionType) {
+            currentAction = actionType;
+            const modal = document.getElementById('action-modal');
+            const title = document.getElementById('modal-title');
+            const form = document.getElementById('param-form');
+            
+            title.textContent = actionType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            let paramsHtml = '';
+            switch (actionType) {
+                case 'drop_nulls':
+                    paramsHtml = '<label>Column (optional, leave empty for all)</label><input type="text" id="param-column" placeholder="Column name">';
+                    break;
+                case 'fill_nulls':
+                    paramsHtml = `
+                        <label>Column (optional)</label><input type="text" id="param-column" placeholder="Column name">
+                        <label>Strategy</label>
+                        <select id="param-strategy">
+                            <option value="mean">Mean</option>
+                            <option value="median">Median</option>
+                            <option value="mode">Mode</option>
+                            <option value="forward_fill">Forward Fill</option>
+                            <option value="backward_fill">Backward Fill</option>
+                        </select>
+                    `;
+                    break;
+                case 'remove_duplicates':
+                    paramsHtml = '<label>Columns (optional, comma-separated)</label><input type="text" id="param-columns" placeholder="col1, col2">';
+                    break;
+                case 'filter_rows':
+                    paramsHtml = `
+                        <label>Column</label><input type="text" id="param-column" placeholder="Column name">
+                        <label>Operator</label>
+                        <select id="param-operator">
+                            <option value="==">==</option>
+                            <option value="!=">!=</option>
+                            <option value=">">></option>
+                            <option value="<"><</option>
+                            <option value=">=">>=</option>
+                            <option value="<="><=</option>
+                            <option value="contains">contains</option>
+                        </select>
+                        <label>Value</label><input type="text" id="param-value" placeholder="Value">
+                    `;
+                    break;
+                case 'drop_columns':
+                    paramsHtml = '<label>Columns (comma-separated)</label><input type="text" id="param-columns" placeholder="col1, col2">';
+                    break;
+                case 'convert_types':
+                    paramsHtml = `
+                        <label>Column</label><input type="text" id="param-column" placeholder="Column name">
+                        <label>Data Type</label>
+                        <select id="param-dtype">
+                            <option value="str">String</option>
+                            <option value="int">Integer</option>
+                            <option value="float">Float</option>
+                            <option value="datetime">Datetime</option>
+                        </select>
+                    `;
+                    break;
+                case 'validate_email':
+                    paramsHtml = `
+                        <label>Column</label><input type="text" id="param-column" value="email" placeholder="Column name">
+                        <label><input type="checkbox" id="param-drop_invalid"> Drop invalid emails</label>
+                    `;
+                    break;
+                case 'outlier_removal':
+                    paramsHtml = `
+                        <label>Column</label><input type="text" id="param-column" placeholder="Column name">
+                        <label>IQR Multiplier</label><input type="number" id="param-multiplier" value="1.5" step="0.1">
+                    `;
+                    break;
+                case 'normalize':
+                    paramsHtml = `
+                        <label>Column</label><input type="text" id="param-column" placeholder="Column name">
+                        <label>Method</label>
+                        <select id="param-method">
+                            <option value="minmax">Min-Max</option>
+                            <option value="zscore">Z-Score</option>
+                        </select>
+                    `;
+                    break;
+            }
+            
+            form.innerHTML = paramsHtml;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('action-modal').classList.add('hidden');
+            currentAction = null;
+        }
+
+        async function executeAction() {
+            if (!currentAction) return;
+            
+            const params = {};
+            const column = document.getElementById('param-column')?.value;
+            if (column) params.column = column;
+            
+            const strategy = document.getElementById('param-strategy')?.value;
+            if (strategy) params.strategy = strategy;
+            
+            const columns = document.getElementById('param-columns')?.value;
+            if (columns) params.columns = columns.split(',').map(c => c.trim());
+            
+            const operator = document.getElementById('param-operator')?.value;
+            if (operator) params.operator = operator;
+            
+            const value = document.getElementById('param-value')?.value;
+            if (value) params.value = value;
+            
+            const dtype = document.getElementById('param-dtype')?.value;
+            if (dtype) params.dtype = dtype;
+            
+            const multiplier = document.getElementById('param-multiplier')?.value;
+            if (multiplier) params.multiplier = parseFloat(multiplier);
+            
+            const method = document.getElementById('param-method')?.value;
+            if (method) params.method = method;
+            
+            const dropInvalid = document.getElementById('param-drop_invalid')?.checked;
+            if (dropInvalid) params.drop_invalid = true;
+            
+            try {
+                addLog(`Executing: ${currentAction}...`, 'info');
+                const res = await fetch('/step', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action_type: currentAction, params })
+                });
+                const data = await res.json();
+                
+                if (data.success || data.status === 'success') {
+                    totalReward += (data.reward || data.data?.reward || 0);
+                    document.getElementById('reward-value').textContent = totalReward.toFixed(4);
+                    document.getElementById('step-value').textContent = (data.observation?.step_count || data.data?.observation?.step_count || 0);
+                    addLog(`${currentAction}: reward=${(data.reward || data.data?.reward || 0).toFixed(4)}`, 'success');
+                    await loadDatasetInfo();
+                } else {
+                    addLog(`${currentAction} failed`, 'error');
+                }
+            } catch (e) {
+                addLog(`Error: ${e.message}`, 'error');
+            }
+            
+            closeModal();
+        }
+
+        async function revertAction() {
+            try {
+                const res = await fetch('/revert', { method: 'POST' });
+                const data = await res.json();
+                addLog('Last action reverted', 'warning');
+                await loadDatasetInfo();
+            } catch (e) {
+                addLog(`Revert failed: ${e.message}`, 'error');
+            }
+        }
+
+        async function submitSolution() {
+            try {
+                addLog('Submitting solution...', 'info');
+                const res = await fetch('/submit', { method: 'POST' });
+                const data = await res.json();
+                
+                const score = data.final_score || data.grade?.final_score || 0;
+                const feedback = data.grade?.feedback || '';
+                document.getElementById('final-score').textContent = score.toFixed(2);
+                document.getElementById('score-feedback').textContent = feedback;
+                document.getElementById('score-value').textContent = score.toFixed(2);
+                document.getElementById('score-modal').classList.remove('hidden');
+                addLog(`Submitted! Score: ${score.toFixed(2)}`, 'success');
+            } catch (e) {
+                addLog(`Submit failed: ${e.message}`, 'error');
+            }
+        }
+
+        function closeScoreModal() {
+            document.getElementById('score-modal').classList.add('hidden');
+        }
+
+        function updateStatus(data) {
+            document.getElementById('status-value').textContent = 'Ready';
+            document.getElementById('status-value').className = 'value healthy';
+            document.getElementById('task-value').textContent = data.task_id || '-';
+        }
+
+        function addLog(message, type = 'info') {
+            const container = document.getElementById('log-container');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            let typeClass = '';
+            if (type === 'success') typeClass = 'reward';
+            else if (type === 'error') typeClass = 'error';
+            
+            entry.innerHTML = `<span class="timestamp">${time}</span><span class="${typeClass}">${message}</span>`;
+            container.insertBefore(entry, container.firstChild);
+            
+            // Keep only last 50 entries
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        async function showSampleData() {
+            try {
+                const res = await fetch('/dataset');
+                const data = await res.json();
+                
+                if (!data.columns || data.columns.length === 0) {
+                    addLog('No dataset loaded. Start a task first.', 'warning');
+                    return;
+                }
+                
+                // Create sample data modal
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.id = 'sample-data-modal';
+                
+                let tableHtml = '<table class="dataset-table"><thead><tr>';
+                data.columns.forEach(col => {
+                    tableHtml += `<th>${col}</th>`;
+                });
+                tableHtml += '</tr></thead><tbody>';
+                
+                // Show first 5 rows as sample
+                const sampleRows = Math.min(5, data.shape?.[0] || 0);
+                for (let i = 0; i < sampleRows; i++) {
+                    tableHtml += '<tr>';
+                    data.columns.forEach(col => {
+                        const nullCount = data.null_counts?.[col] || 0;
+                        const isNull = nullCount > 0 && Math.random() < (nullCount / (data.shape?.[0] || 1));
+                        tableHtml += `<td>${isNull ? '<span style="color: var(--warning);">NULL</span>' : `Sample ${col} ${i+1}`}</td>`;
+                    });
+                    tableHtml += '</tr>';
+                }
+                tableHtml += '</tbody></table>';
+                
+                modal.innerHTML = `
+                    <div class="modal" style="max-width: 800px;">
+                        <h3>📊 Sample Data Preview</h3>
+                        <p style="color: var(--text-muted); margin-bottom: 16px;">
+                            Showing ${sampleRows} sample rows from ${data.shape?.[0] || 0} total rows
+                        </p>
+                        <div style="overflow-x: auto;">
+                            ${tableHtml}
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn-primary" onclick="document.getElementById('sample-data-modal').remove()">Close</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                addLog('Sample data preview opened', 'info');
+            } catch (e) {
+                addLog(`Failed to load sample data: ${e.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

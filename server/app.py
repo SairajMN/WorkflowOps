@@ -12,7 +12,7 @@ import sys, os, uuid, logging, dataclasses, enum, time, threading
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional, List
@@ -1398,6 +1398,10 @@ async def schema():
             },
         },
     }
+
+@app.get("/web", include_in_schema=False)
+async def web():
+    return FileResponse("server/static/index.html")
 
 @app.get("/datasets", tags=["Info"])
 async def datasets():
