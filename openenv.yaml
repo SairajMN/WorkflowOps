@@ -30,7 +30,7 @@ openenv:
 
   entry_points:
     server: server.app:app
-    client: client:HallucinationClient
+    client: 
 
 # Tasks (easy → medium → hard)
 tasks:
@@ -78,7 +78,7 @@ datasets:
   - squad
   - squad_v2
   - trivia_qa
-  - halueval
+  - data_quality_eval
   - truthful_qa
   - hotpotqa
   - boolq

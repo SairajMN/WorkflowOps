@@ -1,5 +1,5 @@
 """
-HallucinationGuard-Env v4.2 — Production FastAPI Server
+AutoClean-Ai v1.0.0 — Production FastAPI Server
 
 Endpoints:
   Standard   : POST /reset  POST /step  GET /state  GET /health
@@ -38,7 +38,7 @@ STUNNING_DOCS_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HallucinationGuard-Env · OpenEnv</title>
+<title>DataQualityGuard-Env · OpenEnv</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080c14'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='%23f59e0b' font-family='sans-serif' font-weight='bold'>H</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -409,14 +409,14 @@ input[type=range] {
 }
 .ep-meta { display: flex; justify-content: space-between; align-items: center; }
 .ep-step { font-size: 11px; color: var(--muted); font-family: var(--mono); }
-.halluc-badge {
+.cleanc-badge {
   display: none;
   font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
   padding: 3px 10px; border-radius: 100px;
 }
-.halluc-badge.show { display: inline-block; }
-.halluc-badge.yes { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
-.halluc-badge.no { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+.cleanc-badge.show { display: inline-block; }
+.cleanc-badge.yes { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.cleanc-badge.no { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
 
 /* ── REWARD BREAKDOWN ── */
 .reward-section { margin-top: 16px; }
@@ -506,7 +506,7 @@ input[type=range] {
     <div class="hero-badge">OpenEnv · RL Environment</div>
     <div class="ver-chip">v4.2.0</div>
     <h1>
-      <span class="accent">Hallucination</span><span class="accent2">Guard</span>‑Env
+      <span class="accent">DataQuality</span><span class="accent2">Guard</span>‑Env
     </h1>
     <p class="hero-sub">
       Train AI models to answer <strong>only from verified context</strong> — with a 9-component reward system that penalizes fabrication and rewards factual grounding, citation accuracy, and calibrated confidence.
@@ -549,7 +549,7 @@ input[type=range] {
 <div id="overview" class="panel active">
   <div class="section-head">
     <h2>How it works</h2>
-    <p>Three primitives. Nine reward signals. One goal: no hallucinations.</p>
+    <p>Three primitives. Nine reward signals. One goal: no data_qualitys.</p>
   </div>
   <div class="steps">
     <div class="step">
@@ -568,13 +568,13 @@ input[type=range] {
       <span class="step-num">03</span>
       <div class="step-icon">📊</div>
       <h4>grade()</h4>
-      <p>Aggregate episode rewards into a task score. Track accuracy, hallucination rate, and skill rating over time.</p>
+      <p>Aggregate episode rewards into a task score. Track accuracy, data_quality rate, and skill rating over time.</p>
     </div>
   </div>
 
   <div class="card">
     <h3>9-Component Reward System</h3>
-    <p>Every answer is graded on <strong>factual correctness</strong>, <strong>source grounding</strong>, <strong>citation accuracy</strong>, <strong>confidence calibration</strong>, <strong>semantic consistency</strong>, <strong>hallucination detection</strong>, <strong>ROUGE-L</strong>, <strong>BERTScore</strong>, and <strong>AlignScore</strong>. Each component is weighted and combined into a single scalar reward in <strong>[0, 1]</strong>. Confident wrong answers are penalized harder than uncertain ones.</p>
+    <p>Every answer is graded on <strong>factual correctness</strong>, <strong>source grounding</strong>, <strong>citation accuracy</strong>, <strong>confidence calibration</strong>, <strong>semantic consistency</strong>, <strong>data_quality detection</strong>, <strong>ROUGE-L</strong>, <strong>BERTScore</strong>, and <strong>AlignScore</strong>. Each component is weighted and combined into a single scalar reward in <strong>[0, 1]</strong>. Confident wrong answers are penalized harder than uncertain ones.</p>
   </div>
   <div class="card">
     <h3>Curriculum Progression</h3>
@@ -634,9 +634,9 @@ input[type=range] {
         <span class="diff-badge advanced">Advanced</span>
         <span class="data-count">~210K examples</span>
       </div>
-      <p>Resist adversarial prompts designed to elicit hallucinations. Many questions are deliberately unanswerable — confident refusals with low confidence score better than fabricated plausible-sounding answers.</p>
+      <p>Resist adversarial prompts designed to elicit data_qualitys. Many questions are deliberately unanswerable — confident refusals with low confidence score better than fabricated plausible-sounding answers.</p>
       <div class="dataset-chips">
-        <span class="ds-chip">HaluEval</span>
+        <span class="ds-chip">DataQualityEval</span>
         <span class="ds-chip">TruthfulQA</span>
         <span class="ds-chip">FEVER</span>
         <span class="ds-chip">Climate-FEVER</span>
@@ -665,7 +665,7 @@ input[type=range] {
       <tbody>
         <tr><td><span class="method post">POST</span></td><td class="endpoint">/reset</td><td class="td-desc">Start episode — returns question, context, difficulty, episode_id</td></tr>
         <tr><td><span class="method post">POST</span></td><td class="endpoint">/step</td><td class="td-desc">Submit answer with confidence + source_quote, receive reward breakdown</td></tr>
-        <tr><td><span class="method get">GET</span></td><td class="endpoint">/state</td><td class="td-desc">Current episode metadata — accuracy, hallucination_rate, skill_rating</td></tr>
+        <tr><td><span class="method get">GET</span></td><td class="endpoint">/state</td><td class="td-desc">Current episode metadata — accuracy, data_quality_rate, skill_rating</td></tr>
         <tr><td><span class="method get">GET</span></td><td class="endpoint">/tasks</td><td class="td-desc">List all 3 tasks with action schema</td></tr>
         <tr><td><span class="method post">POST</span></td><td class="endpoint">/grader</td><td class="td-desc">Score a completed episode (0.0 – 1.0) from rewards + infos</td></tr>
         <tr><td><span class="method post">POST</span></td><td class="endpoint">/baseline</td><td class="td-desc">Run heuristic baseline across all 3 tasks</td></tr>
@@ -716,7 +716,7 @@ result = requests.<span class="fn">post</span>(<span class="st">f"{BASE}/step"</
 }).json()
 
 <span class="fn">print</span>(result[<span class="st">"reward"</span>])            <span class="cm"># scalar in [0, 1]</span>
-<span class="fn">print</span>(result[<span class="st">"is_hallucination"</span>])   <span class="cm"># bool</span></div>
+<span class="fn">print</span>(result[<span class="st">"is_data_quality"</span>])   <span class="cm"># bool</span></div>
     </div>
   </div>
 </div>
@@ -735,7 +735,7 @@ result = requests.<span class="fn">post</span>(<span class="st">f"{BASE}/step"</
         <div class="ep-progress">
           <div class="ep-meta">
             <span class="ep-step" id="ep-step-label">No episode active</span>
-            <span class="halluc-badge" id="halluc-badge"></span>
+            <span class="cleanc-badge" id="cleanc-badge"></span>
           </div>
           <div class="ep-bar-bg"><div class="ep-bar-fill" id="ep-bar" style="width:0%"></div></div>
         </div>
@@ -822,7 +822,7 @@ result = requests.<span class="fn">post</span>(<span class="st">f"{BASE}/step"</
 
 <!-- ══ FOOTER ══ -->
 <footer style="text-align:center;padding:32px 40px 24px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;">
-  HallucinationGuard-Env v4.2.0 &middot; OpenEnv &middot; <a href="/swagger" style="color:var(--amber);text-decoration:none">Swagger Docs</a> &middot; <a href="/redoc" style="color:var(--amber);text-decoration:none">ReDoc</a>
+  DataQualityGuard-Env v4.2.0 &middot; OpenEnv &middot; <a href="/swagger" style="color:var(--amber);text-decoration:none">Swagger Docs</a> &middot; <a href="/redoc" style="color:var(--amber);text-decoration:none">ReDoc</a>
 </footer>
 
 <script>
@@ -836,7 +836,7 @@ const REWARD_KEYS = [
   {key:'citation',              label:'Citation Accuracy',    css:'rc-2'},
   {key:'calibration',          label:'Confidence Calibr.',   css:'rc-3'},
   {key:'consistency',           label:'Semantic Consistency', css:'rc-4'},
-  {key:'halluc_detect',        label:'Hallucination Detect.', css:'rc-5'},
+  {key:'cleanc_detect',        label:'DataQuality Detect.', css:'rc-5'},
   {key:'rouge_l',               label:'ROUGE-L',             css:'rc-6'},
   {key:'bert_score',            label:'BERTScore',            css:'rc-7'},
   {key:'align_score',           label:'AlignScore',           css:'rc-8'},
@@ -846,7 +846,7 @@ const REWARD_KEYS = [
   {key:'citation_accuracy',     label:'Citation Accuracy',    css:'rc-2'},
   {key:'confidence_calibration', label:'Confidence Calibr.',   css:'rc-3'},
   {key:'semantic_consistency',  label:'Semantic Consistency', css:'rc-4'},
-  {key:'hallucination_penalty', label:'Hallucination Detect.', css:'rc-5'},
+  {key:'data_quality_penalty', label:'DataQuality Detect.', css:'rc-5'},
   {key:'rouge_score',           label:'ROUGE-L',              css:'rc-6'},
   {key:'bertscore',             label:'BERTScore',            css:'rc-7'},
   {key:'alignscore',            label:'AlignScore',           css:'rc-8'},
@@ -926,11 +926,11 @@ function renderRewards(data) {
 
   container.innerHTML = html || '<div style="color:var(--border2);font-size:12px;text-align:center;padding:12px">No breakdown data in response</div>';
 
-  // hallucination badge
-  const badge = document.getElementById('halluc-badge');
-  if (data.is_hallucination != null) {
-    badge.className = 'halluc-badge show ' + (data.is_hallucination ? 'yes' : 'no');
-    badge.textContent = data.is_hallucination ? '⚠ Hallucination' : '✓ Grounded';
+  // data_quality badge
+  const badge = document.getElementById('cleanc-badge');
+  if (data.is_data_quality != null) {
+    badge.className = 'cleanc-badge show ' + (data.is_data_quality ? 'yes' : 'no');
+    badge.textContent = data.is_data_quality ? '⚠ DataQuality' : '✓ Grounded';
   }
 }
 
@@ -958,7 +958,7 @@ async function doReset() {
     document.getElementById('reward-bars').innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--border2);font-size:13px;">Submit an answer to see the 9-component reward breakdown</div>';
     document.getElementById('total-reward').textContent = '—';
     document.getElementById('total-reward').style.color = 'var(--amber)';
-    document.getElementById('halluc-badge').className = 'halluc-badge';
+    document.getElementById('cleanc-badge').className = 'cleanc-badge';
     setStatus('ready');
   } catch(e) {
     document.getElementById('ctx-box').innerHTML = '<span style="color:var(--red)">Error: ' + escHtml(e.message) + '</span>';
@@ -1040,11 +1040,11 @@ function copyCode(btn, id) {
 # FASTAPI APP — session-isolated environments for thread safety
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_default_env: Optional[HallucinationEnvironment] = None
+_default_env: Optional[DataCleaningEnvironment] = None
 _env_loading = False
 _env_lock = threading.Lock()
 
-def _get_default_env() -> HallucinationEnvironment:
+def _get_default_env() -> DataCleaningEnvironment:
     """Get or create the shared dataset-loader environment (used only for dataset access)."""
     global _default_env, _env_loading
     if _default_env is not None:
@@ -1054,8 +1054,8 @@ def _get_default_env() -> HallucinationEnvironment:
             return _default_env
         _env_loading = True
         try:
-            logger.info("Creating HallucinationEnvironment (dataset loader)...")
-            _default_env = HallucinationEnvironment()
+            logger.info("Creating DataCleaningEnvironment (dataset loader)...")
+            _default_env = DataCleaningEnvironment()
             logger.info(f"Environment ready — {_default_env.dataset_loader.get_total_examples():,} examples loaded.")
             return _default_env
         except Exception as e:
@@ -1068,7 +1068,7 @@ def _get_default_env() -> HallucinationEnvironment:
                 def reset(self, **kwargs):
                     return type('Obs', (), {'question': 'Placeholder', 'context': 'Context', 'reward': 0.0, 'done': False, 'info': {}})()
                 def step(self, action):
-                    return type('Obs', (), {'reward': 0.0, 'done': False, 'is_hallucination': False, 'info': {}})()
+                    return type('Obs', (), {'reward': 0.0, 'done': False, 'is_data_quality': False, 'info': {}})()
                 def state(self): return {}
                 def close(self): pass
             _default_env = MinimalEnv()
@@ -1077,22 +1077,22 @@ def _get_default_env() -> HallucinationEnvironment:
             _env_loading = False
 
 
-def _create_session_env(session_id: str) -> HallucinationEnvironment:
+def _create_session_env(session_id: str) -> DataCleaningEnvironment:
     """Create a fresh per-session environment that shares the dataset loader
     (expensive to load) but has its own episode state (safe for concurrent use)."""
     loader_env = _get_default_env()
     # Pass the shared loader directly into __init__ so we skip the expensive
     # DatasetLoader() construction and dataset loading that would otherwise
-    # happen inside HallucinationEnvironment.__init__
-    env = HallucinationEnvironment(session_id=session_id, dataset_loader=loader_env.dataset_loader)
+    # happen inside DataQualityEnvironment.__init__
+    env = DataCleaningEnvironment(session_id=session_id, dataset_loader=loader_env.dataset_loader)
     return env
 
 
-_sessions: Dict[str, HallucinationEnvironment] = {}
+_sessions: Dict[str, DataCleaningEnvironment] = {}
 _session_lock = threading.Lock()
 
 
-def _get_session(session_id: str) -> Optional[HallucinationEnvironment]:
+def _get_session(session_id: str) -> Optional[DataCleaningEnvironment]:
     """Retrieve an existing session environment."""
     with _session_lock:
         return _sessions.get(session_id)
@@ -1147,7 +1147,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    title="HallucinationGuard-Env",
+    title="DataQualityGuard-Env",
     version="4.2.0",
     docs_url="/swagger",
     redoc_url="/redoc",
@@ -1156,7 +1156,7 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 import json as _json
-_LEADERBOARD_FILE = "/tmp/hallucination_guard_leaderboard.json"
+_LEADERBOARD_FILE = "/tmp/data_quality_guard_leaderboard.json"
 
 def _load_leaderboard():
     if os.path.exists(_LEADERBOARD_FILE):
@@ -1230,8 +1230,8 @@ async def step(action_data: Dict[str, Any]):
         if env is None:
             # Fallback: use default env (single-user mode)
             env = _get_default_env()
-        valid = set(HallucinationAction.model_fields.keys()) if hasattr(HallucinationAction, 'model_fields') else set(HallucinationAction.__fields__.keys())
-        action = HallucinationAction(**{k: v for k, v in action_data.items() if k in valid})
+        valid = set(DataCleaningAction.model_fields.keys()) if hasattr(DataCleaningAction, 'model_fields') else set(DataCleaningAction.__fields__.keys())
+        action = DataCleaningAction(**{k: v for k, v in action_data.items() if k in valid})
         result = _safe_dict(env.step(action))
         # If episode is done, clean up session
         if result.get("done", False) and session_id:
@@ -1281,7 +1281,7 @@ async def run_baseline(body: Dict[str, Any] = {}):
         for _ in range(steps):
             if obs_dict.get("done"): break
             ctx = obs_dict.get("context", "")
-            action = HallucinationAction(answer=ctx[:100], confidence=0.6, source_quote=ctx[:80])
+            action = DataQualityAction(answer=ctx[:100], confidence=0.6, source_quote=ctx[:80])
             obs_dict = _safe_dict(env.step(action))
             rewards.append(float(obs_dict.get("reward") or 0))
             obs_meta = obs_dict.get("metadata", {})
@@ -1293,8 +1293,8 @@ async def run_baseline(body: Dict[str, Any] = {}):
                     "correctness": obs_correctness,
                     "grounding": obs_dict.get("grounding_score", 0),
                     "calibration": obs_calibration,
-                    "hallucination_score": 1.0 if obs_dict.get("is_hallucination") else 0.0,
-                    "is_hallucination": bool(obs_dict.get("is_hallucination", False)),
+                    "data_quality_score": 1.0 if obs_dict.get("is_data_quality") else 0.0,
+                    "is_data_quality": bool(obs_dict.get("is_data_quality", False)),
                     "semantic_consistency": rb.get("semantic_consistency", 0.0),
                     "rouge_l": rb.get("rouge_l", 0.0),
                     "bert_score": rb.get("bert_score", 0.0),
@@ -1305,8 +1305,8 @@ async def run_baseline(body: Dict[str, Any] = {}):
                     "correctness": 0.0,
                     "grounding": obs_dict.get("grounding_score", 0),
                     "calibration": 0.6,
-                    "hallucination_score": 1.0 if obs_dict.get("is_hallucination") else 0.0,
-                    "is_hallucination": bool(obs_dict.get("is_hallucination", False)),
+                    "data_quality_score": 1.0 if obs_dict.get("is_data_quality") else 0.0,
+                    "is_data_quality": bool(obs_dict.get("is_data_quality", False)),
                 })
         results.append(compute_task_score(task, rewards, infos))
         try: env.close()
@@ -1321,7 +1321,7 @@ async def batch_evaluate(body: Dict[str, Any]):
     results = []
     for i, item in enumerate(items):
         r, info = calculate_reward(item.get("answer",""), item.get("confidence",0.5), item.get("source_quote",""), item.get("context",""), item.get("ground_truth",""))
-        results.append({"index": i, "reward": round(r,4), "is_hallucination": info.get("is_hallucination", False)})
+        results.append({"index": i, "reward": round(r,4), "is_data_quality": info.get("is_data_quality", False)})
     return {"total_items": len(results), "results": results}
 
 @app.get("/leaderboard", tags=["Leaderboard"])
@@ -1333,7 +1333,7 @@ async def leaderboard():
 
 @app.post("/leaderboard/submit", tags=["Leaderboard"])
 async def submit_leaderboard(data: Dict[str, Any]):
-    required = ["model_name", "avg_reward", "avg_accuracy", "hallucination_rate", "total_episodes", "total_steps"]
+    required = ["model_name", "avg_reward", "avg_accuracy", "data_quality_rate", "total_episodes", "total_steps"]
     if missing := [f for f in required if f not in data]: raise HTTPException(422, f"Missing: {missing}")
     _leaderboard[data["model_name"]] = {**data, "submitted_at": time.time()}
     _save_leaderboard(_leaderboard)
@@ -1345,12 +1345,12 @@ async def health(): return {"status": "healthy", "version": "4.2.0"}
 @app.get("/metadata", tags=["OpenEnv"])
 async def metadata():
     return {
-        "name": "hallucination-guard-env",
+        "name": "data_quality-guard-env",
         "version": "4.2.0",
         "license": "MIT",
         "description": (
             "An OpenEnv RL environment that trains AI models to answer questions "
-            "ONLY from verified context documents — penalizing hallucination and "
+            "ONLY from verified context documents — penalizing data_quality and "
             "rewarding factual grounding."
         ),
     }
@@ -1377,7 +1377,7 @@ async def schema():
                 "done":               {"type": "boolean"},
                 "reward":             {"type": "number"},
                 "feedback":           {"type": "string"},
-                "is_hallucination":   {"type": "boolean"},
+                "is_data_quality":   {"type": "boolean"},
                 "grounding_score":    {"type": "number"},
                 "difficulty_level":   {"type": "string"},
                 "attempts_remaining": {"type": "integer"},
@@ -1389,7 +1389,7 @@ async def schema():
                 "episode_id":            {"type": "string"},
                 "step_count":            {"type": "integer"},
                 "accuracy":              {"type": "number"},
-                "hallucination_rate":    {"type": "number"},
+                "data_quality_rate":    {"type": "number"},
                 "average_reward":        {"type": "number"},
                 "current_difficulty":    {"type": "string"},
                 "skill_rating":          {"type": "number"},
@@ -1408,7 +1408,7 @@ async def datasets():
 async def mcp(body: Dict[str, Any]):
     if body.get("method") == "tools/list":
         return {"jsonrpc": "2.0", "id": body.get("id",1), "result": {"tools": [{"name": "reset", "inputSchema": {"type": "object"}}, {"name": "step", "inputSchema": {"type": "object"}}]}}
-    return {"jsonrpc": "2.0", "id": body.get("id",1), "result": {"name": "hallucination-guard-env", "version": "4.2.0"}}
+    return {"jsonrpc": "2.0", "id": body.get("id",1), "result": {"name": "data_quality-guard-env", "version": "4.2.0"}}
 
 @app.middleware("http")
 async def log_req(request, call_next):

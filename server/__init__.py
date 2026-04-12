@@ -1,4 +1,4 @@
-"""Server module for HallucinationGuard-Env."""
+"""Server module for DataQualityGuard-Env."""
 
 import sys
 import os

@@ -1,4 +1,4 @@
-# HallucinationGuard-Env Dockerfile - HF Spaces optimized
+# DataQualityGuard-Env Dockerfile - HF Spaces optimized
 # Single-stage build: avoids broken --target copy with compiled packages (torch, etc.)
 FROM python:3.10-slim
 
@@ -28,7 +28,7 @@ COPY . .
 RUN pip install --no-cache-dir -e .
 
 # Cache directory for datasets
-RUN mkdir -p /tmp/halluguard_cache /tmp/transformers_cache /tmp/hf_cache
+RUN mkdir -p /tmp/cleanguard_cache /tmp/transformers_cache /tmp/hf_cache
 
 # HF Spaces default port
 EXPOSE 7860
