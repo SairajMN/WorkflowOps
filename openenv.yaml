@@ -1,0 +1,122 @@
+name: hallucination-guard-env
+description: |
+  An OpenEnv RL environment that trains AI models to answer questions
+  ONLY from verified context documents — penalizing hallucination and
+  rewarding factual grounding.
+
+  v4.1: 1,090,163 examples across 38 real-world datasets spanning QA,
+  medical, math, science, news, and summarisation domains.
+
+  9-component reward system: factual correctness · source grounding ·
+  citation accuracy · confidence calibration · semantic consistency ·
+  hallucination penalty · ROUGE · BERTScore · AlignScore.
+
+  Three tasks (easy → medium → hard) with deterministic per-episode graders.
+
+version: 4.2.0
+author: community
+license: MIT
+
+# OpenEnv configuration
+openenv:
+  env_type: custom
+
+  server:
+    port: 7860
+    host: 0.0.0.0
+
+  parameters:
+    max_questions: 10
+
+  # Required OpenEnv endpoints
+  required_endpoints:
+    tasks:    GET  /tasks
+    grader:   POST /grader
+    baseline: POST /baseline
+
+  entry_points:
+    server: server.app:app
+    client: client:HallucinationClient
+
+# Tasks (easy → medium → hard)
+tasks:
+  - id: task_1_factual_grounding
+    name: Factual Grounding
+    difficulty: beginner
+    datasets: [squad, squad_v2, boolq, openbookqa, arc]
+    description: >
+      Answer straightforward factual questions from a short context passage.
+      Single-hop retrieval only. Grader rewards correct citation.
+
+  - id: task_2_multi_hop_synthesis
+    name: Multi-Hop Synthesis
+    difficulty: intermediate
+    datasets: [hotpotqa, coqa, nq_open, ms_marco, newsqa]
+    description: >
+      Synthesise evidence from multiple context sentences to form an answer.
+      Fabricated bridge facts are penalised as hallucinations.
+
+  - id: task_3_adversarial_resistance
+    name: Adversarial Hallucination Resistance
+    difficulty: advanced
+    datasets: [halueval, truthful_qa, fever, climate_fever, adversarial_qa]
+    description: >
+      Resist adversarially-crafted prompts designed to elicit hallucinations.
+      Many questions are unanswerable from context; confident refusals score well.
+
+# Dependencies
+dependencies:
+  - openenv-core>=0.2.0
+  - fastapi>=0.100.0
+  - uvicorn>=0.23.0
+  - requests>=2.31.0
+  - openai>=1.0.0
+
+# Tags for discovery
+tags:
+  - hallucination-detection
+  - question-answering
+  - grounded-generation
+  - fact-checking
+  - rl-environment
+  - curriculum-learning
+  - adversarial-robustness
+
+# All 38 datasets
+datasets:
+  - squad
+  - squad_v2
+  - trivia_qa
+  - halueval
+  - truthful_qa
+  - hotpotqa
+  - boolq
+  - faithdial
+  - fever
+  - arc
+  - openbookqa
+  - ms_marco
+  - coqa
+  - nq_open
+  - commonsense_qa
+  - winogrande
+  - drop
+  - race
+  - newsqa
+  - hellaswag
+  - adversarial_qa
+  - ag_news
+  - aqua_rat
+  - circa
+  - climate_fever
+  - cnn_dailymail
+  - medqa
+  - medmcqa
+  - medical_questions
+  - pubmedqa
+  - qasc
+  - quartz
+  - quail
+  - sciq
+  - scitail
+  - xsum
