@@ -1,19 +1,13 @@
-name: hallucination-guard-env
+name: AutoClean-Ai
 description: |
-  An OpenEnv RL environment that trains AI models to answer questions
-  ONLY from verified context documents — penalizing hallucination and
-  rewarding factual grounding.
+  An OpenEnv RL environment for training AI agents on real-world data cleaning tasks.
+  Agents learn to identify and fix missing values, duplicates, inconsistent formats,
+  outliers, and other data quality issues.
 
-  v4.1: 1,090,163 examples across 38 real-world datasets spanning QA,
-  medical, math, science, news, and summarisation domains.
+  Features 10 standard data cleaning operations, 3 progressive difficulty tasks,
+  shaped rewards for partial progress, and deterministic grading from 0.0-1.0.
 
-  9-component reward system: factual correctness · source grounding ·
-  citation accuracy · confidence calibration · semantic consistency ·
-  hallucination penalty · ROUGE · BERTScore · AlignScore.
-
-  Three tasks (easy → medium → hard) with deterministic per-episode graders.
-
-version: 4.2.0
+version: 1.0.0
 author: community
 license: MIT
 
@@ -40,29 +34,26 @@ openenv:
 
 # Tasks (easy → medium → hard)
 tasks:
-  - id: task_1_factual_grounding
-    name: Factual Grounding
+  - id: task_1_basic_cleaning
+    name: Basic Data Cleaning
     difficulty: beginner
-    datasets: [squad, squad_v2, boolq, openbookqa, arc]
     description: >
-      Answer straightforward factual questions from a short context passage.
-      Single-hop retrieval only. Grader rewards correct citation.
+      Simple cleaning: remove null values and duplicate rows from 100 row dataset.
+      Grader rewards proper null and duplicate handling.
 
-  - id: task_2_multi_hop_synthesis
-    name: Multi-Hop Synthesis
+  - id: task_2_intermediate_cleaning
+    name: Intermediate Data Cleaning
     difficulty: intermediate
-    datasets: [hotpotqa, coqa, nq_open, ms_marco, newsqa]
     description: >
-      Synthesise evidence from multiple context sentences to form an answer.
-      Fabricated bridge facts are penalised as hallucinations.
+      Intermediate tasks: fill missing values, validate emails, remove outliers from 200 row dataset.
+      Grader evaluates data quality improvements.
 
-  - id: task_3_adversarial_resistance
-    name: Adversarial Hallucination Resistance
+  - id: task_3_full_pipeline
+    name: Full Data Cleaning Pipeline
     difficulty: advanced
-    datasets: [halueval, truthful_qa, fever, climate_fever, adversarial_qa]
     description: >
-      Resist adversarially-crafted prompts designed to elicit hallucinations.
-      Many questions are unanswerable from context; confident refusals score well.
+      Complete end-to-end pipeline on 500 row dataset with all cleaning operations.
+      Includes type conversion, normalization, and comprehensive quality checks.
 
 # Dependencies
 dependencies:
@@ -74,13 +65,13 @@ dependencies:
 
 # Tags for discovery
 tags:
-  - hallucination-detection
-  - question-answering
-  - grounded-generation
-  - fact-checking
+  - data-cleaning
+  - data-preprocessing
+  - ml-pipeline
+  - data-quality
   - rl-environment
-  - curriculum-learning
-  - adversarial-robustness
+  - agent-training
+  - tabular-data
 
 # All 38 datasets
 datasets:

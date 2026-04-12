@@ -1,9 +1,9 @@
-"""Professional-grade HallucinationGuard RL Environment.
+"""Professional-grade AutoClean-Ai Data Cleaning Environment.
 
 This module implements a sophisticated, production-ready RL environment with:
-- Curriculum learning with adaptive difficulty
-- Multi-turn conversation support
-- Context retrieval challenges
+- 10 standard data cleaning operations
+- 3 progressive difficulty tasks
+- Shaped rewards with partial progress signals
 - Comprehensive episode management
 - Model-agnostic design (works with any LLM)
 - Real-time metrics and logging
@@ -13,8 +13,9 @@ This module implements a sophisticated, production-ready RL environment with:
 import uuid
 import time
 import logging
+import pandas as pd
+import numpy as np
 from typing import Optional, Dict, Any, List, Tuple
-from dataclasses import dataclass, field
 from enum import Enum
 
 # Add directories to path for imports to work in both local and HF Spaces
@@ -30,29 +31,23 @@ if _dir not in sys.path:
 from openenv.core.env_server import Environment
 
 from models import (
-    HallucinationAction,
-    HallucinationObservation,
-    HallucinationState,
+    DataCleaningAction,
+    DataCleaningObservation,
+    DataCleaningState,
     EpisodeStatistics,
-    AgentSkillProfile,
     RewardBreakdown,
-    SemanticAnalysis,
-    CitationAnalysis,
-    HallucinationSeverity,
-    HallucinationType,
+    DatasetInfo,
     DifficultyLevel,
     EnvironmentConfig,
-    MultiTurnDialogue,
+    CleaningActionType,
 )
 # Import from same directory for HF Spaces deployment compatibility
 from grader import (
     calculate_reward,
-    generate_feedback,
-    detect_hallucination_advanced,
-    HallucinationType as GraderHallucinationType,
-    HallucinationSeverity as GraderHallucinationSeverity,
+    calculate_dataset_quality_score,
+    grade_task_result,
 )
-from dataset_loader import DatasetLoader, QAExample, DifficultyLevel as DatasetDifficulty
+from dataset_loader import DatasetGenerator
 
 
 # Configure logging
@@ -67,34 +62,33 @@ class EpisodePhase(Enum):
     """Phases of an episode."""
     INITIALIZATION = "initialization"
     ACTIVE = "active"
-    MULTI_TURN_CLARIFICATION = "multi_turn_clarification"
-    CONTEXT_RETRIEVAL = "context_retrieval"
+    CLEANING = "cleaning"
+    GRADING = "grading"
     COMPLETION = "completion"
 
 
-class HallucinationEnvironment(Environment[HallucinationAction, HallucinationObservation, HallucinationState]):
+class DataCleaningEnvironment(Environment[DataCleaningAction, DataCleaningObservation, DataCleaningState]):
     """
-    Professional-grade OpenEnv environment for training AI to avoid hallucinations.
+    Professional-grade OpenEnv environment for training AI to perform data cleaning.
 
     Features:
-    - Curriculum learning with progressive difficulty
-    - Adaptive difficulty based on performance
-    - Multi-turn conversation support
-    - Context retrieval challenges
+    - 10 standard data cleaning operations
+    - 3 progressive difficulty tasks
+    - Shaped rewards with partial progress signals
+    - Deterministic grading 0.0-1.0
     - Comprehensive metrics tracking
-    - Model-agnostic design
     - Session management
     """
 
     SUPPORTS_CONCURRENT_SESSIONS = True
-    VERSION = "2.0.0"
+    VERSION = "1.0.0"
 
     def __init__(
         self,
         transform=None,
         config: Optional[EnvironmentConfig] = None,
         session_id: Optional[str] = None,
-        dataset_loader: Optional["DatasetLoader"] = None
+        dataset_generator: Optional["DatasetGenerator"] = None
     ):
         super().__init__(transform=transform)
 
@@ -102,89 +96,43 @@ class HallucinationEnvironment(Environment[HallucinationAction, HallucinationObs
         self.config = config or EnvironmentConfig()
         self.session_id = session_id or str(uuid.uuid4())[:8]
 
-        # Dataset management — accept a pre-loaded shared loader to avoid
-        # reloading 1M+ examples on every session creation.
-        if dataset_loader is not None:
-            self.dataset_loader = dataset_loader
-            logger.info(f"Reusing shared dataset loader — {dataset_loader.get_total_examples():,} examples")
-        else:
-            # First boot: load synthetic baseline, then augment with real HF data
-            self.dataset_loader = DatasetLoader()
-            self.dataset_loader.load_builtin_datasets()
-            logger.info(f"Synthetic dataset: {self.dataset_loader.get_total_examples()} examples")
-
-            # Attempt to load real HuggingFace datasets (SQuAD, TriviaQA, HaluEval, TruthfulQA).
-            # Uses disk cache after first download so restarts are instant.
-            # Gracefully skips if the `datasets` package is not installed.
-            try:
-                real_added = self.dataset_loader.load_real_datasets(max_per_dataset=500, cache=True)
-                if real_added > 0:
-                    logger.info(f"Added {real_added} real examples — total: {self.dataset_loader.get_total_examples()}")
-                else:
-                    logger.info("HuggingFace datasets unavailable; using synthetic data only")
-            except Exception as _ds_err:
-                logger.warning(f"Dataset loading failed ({_ds_err}); continuing with synthetic data only")
-
+        # Dataset management
+        self.dataset_generator = dataset_generator or DatasetGenerator()
+        
         # Episode state
         self.episode_id: Optional[str] = None
         self.episode_phase: EpisodePhase = EpisodePhase.INITIALIZATION
         self.step_count: int = 0
-        self.total_hallucinations: int = 0
-        self.total_correct: int = 0
-        self.total_partial: int = 0
-
-        # Current data
-        self.current_example: Optional[QAExample] = None
-        self.episode_examples: List[QAExample] = []
-        self.episode_start_time: Optional[float] = None
-        self.last_step_time: Optional[float] = None
-
+        
+        # Current dataset
+        self.df: Optional[pd.DataFrame] = None
+        self.initial_df: Optional[pd.DataFrame] = None
+        self.dataset_history: List[pd.DataFrame] = []
+        
         # Performance tracking
         self.reward_history: List[float] = []
-        self.confidence_history: List[float] = []
-        self.hallucination_history: List[bool] = []
-        self.current_streak: int = 0
-        self.best_streak: int = 0
-
-        # Early stopping tracking (NEW)
-        self.consecutive_failures: int = 0
-        self.consecutive_hallucinations: int = 0
-        self.consecutive_perfect: int = 0
+        self.action_history: List[Dict[str, Any]] = []
+        self.quality_history: List[float] = []
+        
+        # Early stopping tracking
+        self.consecutive_noop_actions: int = 0
+        self.consecutive_repeated_actions: int = 0
         self.early_stop_reason: Optional[str] = None
-        self.calibration_history: List[float] = []
-
-        # Curriculum state
-        self.curriculum_stage: int = 0
-        self.curriculum_performance: List[float] = []
-        self.skill_rating: float = 0.5  # ELO-style rating
-
-        # Multi-turn state
-        self.dialogue: Optional[MultiTurnDialogue] = None
-        self.pending_clarifications: List[str] = []
-
-        # Agent profile (persistent across episodes)
-        self.agent_profile: Optional[AgentSkillProfile] = None
-
-        # Context retrieval challenge state
-        self.revealed_context_fragments: List[str] = []
-        self.context_retrieval_turns: int = 0
-
-        # Active model adapter (set via reset(model=...) for auto-play mode)
-        self.active_adapter = None
-
-        logger.info(f"Initialized HallucinationEnvironment (session={self.session_id})")
+        
+        # Task state
+        self.current_task_id: str = ""
+        self.current_difficulty: str = "intermediate"
+        
+        logger.info(f"Initialized DataCleaningEnvironment (session={self.session_id})")
 
     def reset(
         self,
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
         difficulty: Optional[str] = None,
-        enable_multi_turn: bool = False,
-        enable_context_retrieval: bool = False,
-        model: Optional[str] = None,
-        model_config: Optional[Dict[str, Any]] = None,
+        task_id: Optional[str] = None,
         **kwargs
-    ) -> HallucinationObservation:
+    ) -> DataCleaningObservation:
         """
         Reset the environment for a new episode.
 
@@ -192,40 +140,13 @@ class HallucinationEnvironment(Environment[HallucinationAction, HallucinationObs
             seed: Random seed for reproducibility
             episode_id: Custom episode ID
             difficulty: Starting difficulty level
-            enable_multi_turn: Enable multi-turn clarification
-            enable_context_retrieval: Enable context retrieval challenges
-            model: Model provider to use for auto-play mode.
-                   Supported: "openai", "anthropic", "huggingface", "ollama", "generic".
-                   When set, the environment calls the model automatically on each step
-                   so you only need to call reset() + step() in a loop.
-            model_config: Optional dict passed to create_adapter(). Keys:
-                   model_name, api_key, api_base, temperature, max_tokens, etc.
+            task_id: Specific task to run
 
         Returns:
             Initial observation
         """
-        import random
         if seed is not None:
-            random.seed(seed)
-            # Reset used indices for reproducibility
-            self.dataset_loader.reset_usage()
-
-        # ── Model adapter setup ───────────────────────────────────────────────
-        # When model= is supplied, the environment auto-generates answers by
-        # calling the adapter inside step(), so callers just loop reset/step.
-        self.active_adapter = None
-        if model is not None:
-            try:
-                import sys, os
-                sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                from model_adapters import create_adapter
-                cfg = model_config or {}
-                self.active_adapter = create_adapter(model, **cfg)
-                logger.info(f"Active adapter: {model} ({self.active_adapter.__class__.__name__})")
-            except ImportError:
-                logger.info(f"model_adapters not installed — manual action mode (model={model} ignored)")
-            except Exception as e:
-                logger.warning(f"Could not create adapter for '{model}': {e}. Manual action mode.")
+            np.random.seed(seed)
 
         # Generate episode ID
         self.episode_id = episode_id or f"ep_{uuid.uuid4().hex[:8]}"
@@ -234,188 +155,186 @@ class HallucinationEnvironment(Environment[HallucinationAction, HallucinationObs
 
         # Reset counters
         self.step_count = 0
-        self.total_hallucinations = 0
-        self.total_correct = 0
-        self.total_partial = 0
         self.reward_history = []
-        self.confidence_history = []
-        self.hallucination_history = []
-        self.current_streak = 0
-
-        # Reset early stopping counters
-        self.consecutive_failures = 0
-        self.consecutive_hallucinations = 0
-        self.consecutive_perfect = 0
+        self.action_history = []
+        self.quality_history = []
+        self.dataset_history = []
+        self.consecutive_noop_actions = 0
+        self.consecutive_repeated_actions = 0
         self.early_stop_reason = None
-        self.calibration_history = []
 
-        # Reset multi-turn state
-        self.dialogue = MultiTurnDialogue() if enable_multi_turn else None
-        self.pending_clarifications = []
-
-        # Reset context retrieval state
-        self.revealed_context_fragments = []
-        self.context_retrieval_turns = 0
-
-        # Determine starting difficulty
-        if difficulty:
-            try:
-                start_difficulty = DifficultyLevel(difficulty.lower())
-            except ValueError:
-                start_difficulty = self.config.initial_difficulty
-        elif self.config.adaptive_difficulty and self.agent_profile:
-            # Use agent's skill level
-            start_difficulty = self.agent_profile.difficulty_ceiling
+        # Determine task and difficulty
+        if task_id:
+            self.current_task_id = task_id
         else:
-            start_difficulty = self.config.initial_difficulty
+            # Map difficulty to default task
+            diff_task_map = {
+                "beginner": "task_1_basic_cleaning",
+                "intermediate": "task_2_intermediate_cleaning", 
+                "advanced": "task_3_full_pipeline"
+            }
+            self.current_task_id = diff_task_map.get(difficulty or "intermediate", "task_1_basic_cleaning")
 
-        # Load questions for this episode
-        mix_difficulties = self.config.curriculum_enabled and start_difficulty == DifficultyLevel.INTERMEDIATE
-        self.episode_examples = self.dataset_loader.start_new_episode(
-            num_questions=self.config.max_questions_per_episode,
-            difficulty=start_difficulty if not mix_difficulties else None,
-            mix_difficulties=mix_difficulties
-        )
-
-        if not self.episode_examples:
-            logger.error("No examples loaded for episode")
-            return self._create_error_observation("No questions available")
-
-        self.current_example = self.episode_examples[0]
+        # Generate dataset based on task
+        self.df = self.dataset_generator.generate_dataset(self.current_task_id, seed=seed)
+        self.initial_df = self.df.copy()
+        self.dataset_history.append(self.df.copy())
+        
+        # Calculate initial quality score
+        initial_quality = calculate_dataset_quality_score(self.df, self.current_task_id)
+        self.quality_history.append(initial_quality)
+        
         self.episode_phase = EpisodePhase.ACTIVE
 
-        logger.info(f"Reset episode {self.episode_id} with {len(self.episode_examples)} questions")
+        logger.info(f"Reset episode {self.episode_id} task={self.current_task_id} rows={len(self.df)}")
 
         return self._create_observation(
-            question=self.current_example.question,
-            context=self._get_context_for_observation(self.current_example),
-            feedback="Episode started. Answer using only the provided context.",
+            message="Episode started. Perform data cleaning operations on the dataset.",
             metadata={"phase": self.episode_phase.value}
         )
 
     def step(
         self,
-        action: Optional[HallucinationAction] = None,
-        timeout_s: Optional[float] = None,
+        action: DataCleaningAction,
         **kwargs
-    ) -> HallucinationObservation:
+    ) -> DataCleaningObservation:
         """
         Process the AI's action and return the next observation.
 
-        Auto-play mode: if reset(model=...) was called, action can be None —
-        the environment calls the active adapter to generate an answer
-        automatically using the current question and context.
-
-        Manual mode: pass a HallucinationAction with answer, confidence, and
-        source_quote filled in (the normal RL training loop).
-
-        Handles:
-        - Standard Q&A steps
-        - Multi-turn clarifications
-        - Context retrieval challenges
+        Executes the requested data cleaning operation, calculates reward,
+        and returns updated state.
         """
         current_time = time.time()
         step_duration = current_time - (self.last_step_time or current_time)
         self.last_step_time = current_time
 
-        # ── Auto-play: generate action via active adapter ─────────────────────
-        if action is None or (not action.answer and self.active_adapter is not None):
-            if self.current_example is not None and self.active_adapter is not None:
-                try:
-                    resp = self.active_adapter.generate_response(
-                        question=self.current_example.question,
-                        context=self.current_example.context,
-                        require_citation=True,
-                        require_confidence=True,
-                    )
-                    action = HallucinationAction(
-                        answer=resp.answer,
-                        confidence=resp.confidence,
-                        source_quote=resp.source_quote or "",
-                        reasoning=resp.reasoning or "",
-                    )
-                    logger.debug(f"Auto-play answer: {resp.answer[:80]}...")
-                except Exception as e:
-                    logger.warning(f"Adapter generate_response failed: {e}")
-                    action = HallucinationAction(answer="", confidence=0.5)
-            elif action is None:
-                action = HallucinationAction(answer="", confidence=0.5)
-
-        # Handle different episode phases
-        if self.episode_phase == EpisodePhase.MULTI_TURN_CLARIFICATION:
-            return self._handle_clarification_step(action)
-        elif self.episode_phase == EpisodePhase.CONTEXT_RETRIEVAL:
-            return self._handle_context_retrieval_step(action)
-
-        # Standard Q&A step
-        if self.current_example is None:
+        if self.df is None:
             return self._end_episode()
 
-        # Validate action
-        if not action.answer and not action.requires_clarification:
-            return self._create_error_observation("No answer provided")
+        # Handle submit action
+        if action.action_type == CleaningActionType.SUBMIT:
+            return self._end_episode()
 
-        # Handle clarification request
-        if action.requires_clarification and self.dialogue:
-            return self._handle_clarification_request(action)
+        # Handle revert action
+        if action.action_type == CleaningActionType.REVERT:
+            if len(self.dataset_history) > 1:
+                self.dataset_history.pop()
+                self.df = self.dataset_history[-1].copy()
+                return self._create_observation(
+                    message="Reverted to previous state",
+                    reward=0.0
+                )
+            else:
+                return self._create_observation(
+                    message="Cannot revert: no previous state available",
+                    reward=-0.05
+                )
 
-        # Process the answer
-        return self._process_answer(action, step_duration)
+        # Validate and execute action
+        try:
+            self.df = self._execute_action(self.df, action)
+            self.dataset_history.append(self.df.copy())
+            
+            # Calculate reward and quality
+            previous_quality = self.quality_history[-1] if self.quality_history else 0.0
+            current_quality = calculate_dataset_quality_score(self.df, self.current_task_id)
+            
+            reward, reward_info = calculate_reward(
+                df=self.df,
+                initial_df=self.initial_df,
+                previous_quality=previous_quality,
+                current_quality=current_quality,
+                action=action,
+                task_id=self.current_task_id,
+                step_count=self.step_count
+            )
+            
+            self.quality_history.append(current_quality)
+            
+            # Update tracking
+            self.reward_history.append(reward)
+            self.action_history.append({
+                "action_type": action.action_type,
+                "params": action.params,
+                "reward": reward,
+                "quality_improvement": current_quality - previous_quality
+            })
+            
+            # Check for repeated actions
+            if len(self.action_history) >= 2:
+                last_action = self.action_history[-2]
+                if last_action["action_type"] == action.action_type and last_action["params"] == action.params:
+                    self.consecutive_repeated_actions += 1
+                    reward -= 0.05 * self.consecutive_repeated_actions
+                else:
+                    self.consecutive_repeated_actions = 0
 
-    def state(self) -> HallucinationState:
+            self.step_count += 1
+
+            # Check for early stopping
+            early_stop = self._check_early_stopping()
+            
+            done = self.step_count >= self.config.max_steps_per_episode or early_stop
+
+            if early_stop:
+                done = True
+                self.early_stop_reason = early_stop
+                self.episode_phase = EpisodePhase.COMPLETION
+
+            return self._create_observation(
+                message=f"Executed {action.action_type} successfully",
+                reward=reward,
+                done=done,
+                metadata={
+                    "step": self.step_count,
+                    "previous_quality": previous_quality,
+                    "current_quality": current_quality,
+                    "quality_improvement": current_quality - previous_quality,
+                    "reward_breakdown": reward_info,
+                }
+            )
+
+        except Exception as e:
+            logger.warning(f"Action execution failed: {e}")
+            return self._create_error_observation(f"Invalid action: {str(e)}")
+
+    def state(self) -> DataCleaningState:
         """Return comprehensive state of the environment."""
         # Calculate derived metrics
-        accuracy = self.total_correct / max(1, self.step_count)
-        hallucination_rate = self.total_hallucinations / max(1, self.step_count)
-        avg_confidence = sum(self.confidence_history) / max(1, len(self.confidence_history))
-
-        # Calculate calibration error
-        calibration_error = 0.0
-        if self.confidence_history and self.reward_history:
-            calibration_error = sum(
-                abs(c - r) for c, r in zip(self.confidence_history, self.reward_history)
-            ) / len(self.confidence_history)
+        avg_reward = sum(self.reward_history) / max(1, len(self.reward_history))
+        current_quality = self.quality_history[-1] if self.quality_history else 0.0
+        best_quality = max(self.quality_history) if self.quality_history else 0.0
 
         # Build episode statistics
         episode_stats = EpisodeStatistics(
             episode_id=self.episode_id or "",
-            total_questions=len(self.episode_examples),
-            questions_answered=self.step_count,
-            correct_answers=self.total_correct,
-            hallucinated_answers=self.total_hallucinations,
-            partially_correct=self.total_partial,
-            average_confidence=avg_confidence,
-            average_reward=sum(self.reward_history) / max(1, len(self.reward_history)),
-            calibration_error=calibration_error,
+            total_steps=self.step_count,
+            initial_quality=self.quality_history[0] if self.quality_history else 0.0,
+            final_quality=current_quality,
+            quality_improvement=current_quality - (self.quality_history[0] if self.quality_history else 0.0),
+            actions_taken={action["action_type"]: sum(1 for a in self.action_history if a["action_type"] == action["action_type"]) for action in self.action_history},
             reward_history=self.reward_history.copy(),
+            total_reward=sum(self.reward_history),
         )
 
-        return HallucinationState(
+        dataset_info = self._get_dataset_info(self.df) if self.df is not None else DatasetInfo()
+        initial_dataset_info = self._get_dataset_info(self.initial_df) if self.initial_df is not None else DatasetInfo()
+
+        return DataCleaningState(
             episode_id=self.episode_id,
             session_id=self.session_id,
             step_count=self.step_count,
-            max_questions=self.config.max_questions_per_episode,
-            total_hallucinations=self.total_hallucinations,
-            hallucination_rate=hallucination_rate,
-            total_correct=self.total_correct,
-            total_partial=self.total_partial,
-            accuracy=accuracy,
-            average_reward=sum(self.reward_history) / max(1, len(self.reward_history)),
-            average_confidence=avg_confidence,
-            calibration_error=calibration_error,
-            current_difficulty=self._get_current_difficulty(),
-            curriculum_stage=self.curriculum_stage,
-            skill_rating=self.skill_rating,
-            current_streak=self.current_streak,
-            best_streak=self.best_streak,
-            episode_stats=episode_stats.model_dump() if episode_stats else None,
-            agent_profile=self.agent_profile.model_dump() if self.agent_profile else None,
-            config={
-                "multi_turn_enabled": self.dialogue is not None,
-                "context_retrieval_enabled": self.config.enable_multi_turn,
-                "adaptive_difficulty": self.config.adaptive_difficulty,
-            },
-            episode_start_time=self.episode_start_time,
+            max_steps=self.config.max_steps_per_episode,
+            dataset_info=dataset_info,
+            initial_dataset_info=initial_dataset_info,
+            total_reward=sum(self.reward_history),
+            reward_history=self.reward_history.copy(),
+            action_history=self.action_history.copy(),
+            current_quality_score=current_quality,
+            best_quality_score=best_quality,
+            current_task_id=self.current_task_id,
+            difficulty_level=self.current_difficulty,
+            episode_start_time=self.episode_start_time if hasattr(self, 'episode_start_time') else None,
             last_step_time=self.last_step_time,
             metadata={
                 "phase": self.episode_phase.value,
@@ -424,342 +343,232 @@ class HallucinationEnvironment(Environment[HallucinationAction, HallucinationObs
         )
 
     def close(self) -> None:
-        """Clean up resources and save agent profile."""
-        if self.agent_profile:
-            self._update_agent_profile()
+        """Clean up resources."""
         logger.info(f"Closed environment (session={self.session_id})")
 
-    def _process_answer(
-        self,
-        action: HallucinationAction,
-        step_duration: float
-    ) -> HallucinationObservation:
-        """Process a standard answer and compute rewards."""
+    def _execute_action(self, df: pd.DataFrame, action: DataCleaningAction) -> pd.DataFrame:
+        """Execute the requested cleaning action on the dataframe."""
+        params = action.params
+        
+        if action.action_type == CleaningActionType.DROP_NULLS:
+            column = params.get("column")
+            if column and column in df.columns:
+                return df.dropna(subset=[column]).reset_index(drop=True)
+            else:
+                return df.dropna().reset_index(drop=True)
 
-        # Get ground truth
-        ground_truth = self.current_example.answer
-        context = self.current_example.context
+        elif action.action_type == CleaningActionType.FILL_NULLS:
+            column = params.get("column")
+            strategy = params.get("strategy", "mean")
+            
+            if column not in df.columns:
+                raise ValueError(f"Column {column} not found")
+                
+            if strategy == "mean":
+                df[column] = df[column].fillna(df[column].mean())
+            elif strategy == "median":
+                df[column] = df[column].fillna(df[column].median())
+            elif strategy == "mode":
+                df[column] = df[column].fillna(df[column].mode()[0] if not df[column].mode().empty else 0)
+            elif strategy == "forward_fill":
+                df[column] = df[column].ffill()
+            elif strategy == "backward_fill":
+                df[column] = df[column].bfill()
+            return df
 
-        # Calculate reward using advanced grader
-        difficulty_str = self.current_example.difficulty.value if self.current_example else "intermediate"
-        prev_performance = self.skill_rating
+        elif action.action_type == CleaningActionType.REMOVE_DUPLICATES:
+            columns = params.get("columns")
+            if columns:
+                return df.drop_duplicates(subset=columns).reset_index(drop=True)
+            else:
+                return df.drop_duplicates().reset_index(drop=True)
 
-        reward, info = calculate_reward(
-            answer=action.answer,
-            confidence=action.confidence,
-            source_quote=action.source_quote,
-            context=context,
-            ground_truth=ground_truth,
-            difficulty_level=difficulty_str,
-            previous_performance=prev_performance,
-            reward_weights=self.config.reward_weights
-        )
+        elif action.action_type == CleaningActionType.VALIDATE_EMAIL:
+            column = params.get("column")
+            drop_invalid = params.get("drop_invalid", False)
+            
+            if column not in df.columns:
+                raise ValueError(f"Column {column} not found")
+                
+            # Simple email validation regex
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            valid_mask = df[column].astype(str).str.match(email_pattern, na=False)
+            
+            if drop_invalid:
+                return df[valid_mask].reset_index(drop=True)
+            else:
+                return df
 
-        # Extract metrics from info
-        is_hallucination = info.get("is_hallucination", False)
-        hallucination_type_str = info.get("hallucination_type", "none")
-        hallucination_severity_str = info.get("hallucination_severity", "NONE")
-        correctness = info.get("correctness", 0.0)
-        grounding_score = info.get("grounding", 0.0)
-        calibration_score = info.get("calibration", 0.0)
+        elif action.action_type == CleaningActionType.OUTLIER_REMOVAL:
+            column = params.get("column")
+            multiplier = params.get("multiplier", 1.5)
+            
+            if column not in df.columns:
+                raise ValueError(f"Column {column} not found")
+                
+            Q1 = df[column].quantile(0.25)
+            Q3 = df[column].quantile(0.75)
+            IQR = Q3 - Q1
+            
+            lower_bound = Q1 - multiplier * IQR
+            upper_bound = Q3 + multiplier * IQR
+            
+            return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)].reset_index(drop=True)
 
-        # Map hallucination type
-        try:
-            hallucination_type = HallucinationType(hallucination_type_str)
-        except ValueError:
-            hallucination_type = HallucinationType.NONE
+        elif action.action_type == CleaningActionType.CONVERT_TYPES:
+            column = params.get("column")
+            dtype = params.get("dtype")
+            
+            if column not in df.columns:
+                raise ValueError(f"Column {column} not found")
+                
+            if dtype == "int":
+                df[column] = pd.to_numeric(df[column], errors='coerce').astype('Int64')
+            elif dtype == "float":
+                df[column] = pd.to_numeric(df[column], errors='coerce')
+            elif dtype == "str":
+                df[column] = df[column].astype(str)
+            elif dtype == "datetime":
+                df[column] = pd.to_datetime(df[column], errors='coerce')
+            return df
 
-        # Map severity
-        try:
-            severity = HallucinationSeverity[hallucination_severity_str]
-        except KeyError:
-            severity = HallucinationSeverity.NONE
+        elif action.action_type == CleaningActionType.NORMALIZE:
+            column = params.get("column")
+            method = params.get("method", "minmax")
+            
+            if column not in df.columns:
+                raise ValueError(f"Column {column} not found")
+                
+            if method == "minmax":
+                min_val = df[column].min()
+                max_val = df[column].max()
+                if max_val != min_val:
+                    df[column] = (df[column] - min_val) / (max_val - min_val)
+            elif method == "zscore":
+                mean_val = df[column].mean()
+                std_val = df[column].std()
+                if std_val != 0:
+                    df[column] = (df[column] - mean_val) / std_val
+            return df
 
-        # Update statistics
-        if is_hallucination:
-            self.total_hallucinations += 1
-            self.current_streak = 0
-            self.consecutive_hallucinations += 1
-            self.consecutive_perfect = 0
-        elif correctness > 0.7:
-            self.total_correct += 1
-            self.current_streak += 1
-            self.best_streak = max(self.best_streak, self.current_streak)
-            self.consecutive_perfect += 1
-            self.consecutive_hallucinations = 0
-            self.consecutive_failures = 0
+        elif action.action_type == CleaningActionType.DROP_COLUMNS:
+            columns = params.get("columns", [])
+            existing_columns = [col for col in columns if col in df.columns]
+            return df.drop(columns=existing_columns).reset_index(drop=True)
+
+        elif action.action_type == CleaningActionType.FILTER_ROWS:
+            column = params.get("column")
+            operator = params.get("operator")
+            value = params.get("value")
+            
+            if column not in df.columns:
+                raise ValueError(f"Column {column} not found")
+                
+            if operator == ">":
+                return df[df[column] > value].reset_index(drop=True)
+            elif operator == "<":
+                return df[df[column] < value].reset_index(drop=True)
+            elif operator == "==":
+                return df[df[column] == value].reset_index(drop=True)
+            elif operator == ">=":
+                return df[df[column] >= value].reset_index(drop=True)
+            elif operator == "<=":
+                return df[df[column] <= value].reset_index(drop=True)
+            else:
+                raise ValueError(f"Unknown operator: {operator}")
+
         else:
-            self.total_partial += 1
-            self.current_streak = 0
-            self.consecutive_perfect = 0
-            self.consecutive_hallucinations = 0
-            if reward < self.config.early_stopping_min_reward:
-                self.consecutive_failures += 1
+            raise ValueError(f"Unknown action type: {action.action_type}")
 
-        # Track calibration history
-        calibration_error = abs(action.confidence - correctness)
-        self.calibration_history.append(calibration_error)
-
-        # Track history
-        self.reward_history.append(reward)
-        self.confidence_history.append(action.confidence)
-        self.hallucination_history.append(is_hallucination)
-
-        # Update skill rating (ELO-style)
-        expected_score = 1 / (1 + 10 ** ((0.5 - self.skill_rating) * 4))
-        actual_score = 1.0 if correctness > 0.7 else (0.5 if correctness > 0.4 else 0.0)
-        self.skill_rating += 0.05 * (actual_score - expected_score)
-        self.skill_rating = max(0.0, min(1.0, self.skill_rating))
-
-        # Generate feedback
-        feedback = generate_feedback(
-            answer=action.answer,
-            ground_truth=ground_truth,
-            is_hallucination=is_hallucination,
-            hallucination_type=hallucination_type,
-            hallucination_severity=severity,
-            grounding_score=grounding_score,
-            correctness=correctness,
-            calibration_score=calibration_score,
-            total_reward=reward
-        )
-
-        # Move to next question
-        self.step_count += 1
-
-        # Check for early stopping conditions
-        early_stop = self._check_early_stopping(is_hallucination, correctness, calibration_error)
-
-        # Determine if episode is done
-        done = self.step_count >= self.config.max_questions_per_episode
-
-        if early_stop:
-            done = True
-            self.early_stop_reason = early_stop
-            self.episode_phase = EpisodePhase.COMPLETION
-            feedback += f" [Early stop: {early_stop}]"
-
-        if not done:
-            self.current_example = self.dataset_loader.get_example_for_step(self.step_count)
-        else:
-            self.current_example = None
-            self.episode_phase = EpisodePhase.COMPLETION
-
-        # Build observation
-        observation = self._create_observation(
-            question=self.current_example.question if self.current_example else "",
-            context=self._get_context_for_observation(self.current_example) if self.current_example else "",
-            ground_truth=ground_truth if done else "",  # Only reveal at end
-            feedback=feedback,
-            reward=reward,
-            is_hallucination=is_hallucination,
-            hallucination_type=hallucination_type,
-            hallucination_severity=severity,
-            grounding_score=grounding_score,
-            done=done,
-            metadata={
-                "step": self.step_count,
-                "correctness": correctness,
-                "calibration": calibration_score,
-                "hallucination_score": info.get("hallucination_score", 0.0),
-                "reward_breakdown": self._extract_reward_breakdown(info),
-                "semantic_analysis": info.get("semantic_analysis", {}),
-                "citation_analysis": info.get("citation_analysis", {}),
-            }
-        )
-
-        # Update dialogue history if enabled
-        if self.dialogue:
-            self.dialogue.turn_number += 1
-            self.dialogue.conversation_history.append({
-                "question": observation.question,
-                "answer": action.answer,
-                "feedback": feedback
-            })
-
-        return observation
-
-    def _handle_clarification_request(
-        self,
-        action: HallucinationAction
-    ) -> HallucinationObservation:
-        """Handle a request for clarification."""
-        if not self.dialogue:
-            return self._create_error_observation("Multi-turn not enabled")
-
-        # Add clarification questions to pending list
-        self.pending_clarifications.extend(action.clarification_questions)
-        self.dialogue.unresolved_queries.extend(action.clarification_questions)
-
-        # Provide clarifications (simulated)
-        clarifications = []
-        for q in action.clarification_questions:
-            # Simple keyword-based clarification
-            clarification = self._generate_clarification(q, self.current_example)
-            clarifications.append(clarification)
-            if q in self.dialogue.unresolved_queries:
-                self.dialogue.unresolved_queries.remove(q)
-
-        # Switch to active phase
-        self.episode_phase = EpisodePhase.ACTIVE
-
-        return self._create_observation(
-            question=self.current_example.question if self.current_example else "",
-            context=self.current_example.context if self.current_example else "",
-            feedback=f"Clarifications provided: {'; '.join(clarifications)}",
-            metadata={
-                "clarifications": clarifications,
-                "phase": self.episode_phase.value
-            }
-        )
-
-    def _handle_clarification_step(
-        self,
-        action: HallucinationAction
-    ) -> HallucinationObservation:
-        """Handle a step during multi-turn clarification."""
-        # Process clarification and return to main question
-        self.episode_phase = EpisodePhase.ACTIVE
-        return self._process_answer(action, 0.0)
-
-    def _handle_context_retrieval_step(
-        self,
-        action: HallucinationAction
-    ) -> HallucinationObservation:
-        """Handle context retrieval challenge."""
-        # Reveal more context based on action
-        full_context = self.current_example.context if self.current_example else ""
-        context_fragments = self._split_context_into_fragments(full_context)
-
-        # Reveal additional fragments
-        new_revealed = min(
-            len(self.revealed_context_fragments) + 1,
-            len(context_fragments)
-        )
-        self.revealed_context_fragments = context_fragments[:new_revealed]
-
-        revealed_context = " ".join(self.revealed_context_fragments)
-        self.context_retrieval_turns += 1
-
-        # Check if enough context revealed or max turns reached
-        if self.context_retrieval_turns >= self.config.max_turns_per_question or \
-           new_revealed >= len(context_fragments):
-            self.episode_phase = EpisodePhase.ACTIVE
-            # Update current example with full context
-            if self.current_example:
-                self.current_example.metadata["revealed_context"] = revealed_context
-        else:
-            # Stay in retrieval phase
-            pass
-
-        return self._create_observation(
-            question=self.current_example.question if self.current_example else "",
-            context=revealed_context,
-            feedback=f"Context revealed: {new_revealed}/{len(context_fragments)} fragments",
-            metadata={
-                "fragments_revealed": new_revealed,
-                "total_fragments": len(context_fragments),
-                "phase": self.episode_phase.value
-            }
+    def _get_dataset_info(self, df: pd.DataFrame) -> DatasetInfo:
+        """Generate comprehensive dataset metadata and quality metrics."""
+        return DatasetInfo(
+            shape=[df.shape[0], df.shape[1]],
+            columns=list(df.columns),
+            null_counts=df.isnull().sum().to_dict(),
+            null_percentages=(df.isnull().sum() / len(df) * 100).to_dict(),
+            duplicate_count=df.duplicated().sum(),
+            dtypes=df.dtypes.astype(str).to_dict(),
+            numeric_columns=list(df.select_dtypes(include=[np.number]).columns),
+            categorical_columns=list(df.select_dtypes(exclude=[np.number]).columns),
+            quality_score=calculate_dataset_quality_score(df, self.current_task_id)
         )
 
     def _create_observation(
         self,
-        question: str = "",
-        context: str = "",
-        ground_truth: str = "",
-        feedback: str = "",
+        message: str = "",
         reward: Optional[float] = None,
         done: bool = False,
-        is_hallucination: bool = False,
-        hallucination_type: HallucinationType = HallucinationType.NONE,
-        hallucination_severity: HallucinationSeverity = HallucinationSeverity.NONE,
-        grounding_score: float = 0.0,
         metadata: Optional[Dict[str, Any]] = None
-    ) -> HallucinationObservation:
+    ) -> DataCleaningObservation:
         """Create a comprehensive observation."""
-        accuracy_so_far = self.total_correct / max(1, self.step_count) if self.step_count > 0 else 0.0
-
-        # Extract reward breakdown from metadata if available
-        reward_breakdown = None
-        semantic_analysis = None
-        citation_analysis = None
-        if metadata:
-            reward_breakdown = metadata.get("reward_breakdown")
-            semantic_analysis = metadata.get("semantic_analysis")
-            citation_analysis = metadata.get("citation_analysis")
-
-        return HallucinationObservation(
-            question=question,
-            context=context,
-            ground_truth=ground_truth,
-            question_id=self.current_example.id if self.current_example else "",
-            source_dataset=self.current_example.source if self.current_example else "",
+        dataset_info = self._get_dataset_info(self.df) if self.df is not None else DatasetInfo()
+        
+        all_actions = list(CleaningActionType)
+        available_actions = [action for action in all_actions if action != CleaningActionType.SUBMIT]
+        
+        reward_breakdown = metadata.get("reward_breakdown") if metadata else None
+        
+        previous_quality = self.quality_history[-2] if len(self.quality_history) >= 2 else 0.0
+        current_quality = self.quality_history[-1] if self.quality_history else 0.0
+        
+        return DataCleaningObservation(
+            dataset_info=dataset_info,
             done=done,
             reward=reward,
-            feedback=feedback,
-            is_hallucination=is_hallucination,
-            hallucination_type=hallucination_type,
-            hallucination_severity=hallucination_severity,
-            grounding_score=grounding_score,
-            accuracy_so_far=accuracy_so_far,
-            attempts_remaining=max(0, self.config.max_questions_per_episode - self.step_count),
-            current_streak=self.current_streak,
-            best_streak=self.best_streak,
-            difficulty_level=self._get_current_difficulty().value if hasattr(self._get_current_difficulty(), 'value') else str(self._get_current_difficulty()),
-            curriculum_progress=self.step_count / max(1, self.config.max_questions_per_episode),
-            skill_rating=self.skill_rating,
-            dialogue=self.dialogue,
+            message=message,
+            available_actions=available_actions,
+            step_count=self.step_count,
+            task_id=self.current_task_id,
+            quality_score=current_quality,
+            previous_quality=previous_quality,
+            quality_improvement=current_quality - previous_quality,
             reward_breakdown=reward_breakdown,
-            semantic_analysis=semantic_analysis,
-            citation_analysis=citation_analysis,
+            action_history=self.action_history.copy(),
+            difficulty_level=DifficultyLevel(self.current_difficulty) if self.current_difficulty in DifficultyLevel.__members__ else DifficultyLevel.INTERMEDIATE,
+            task_progress=self.step_count / self.config.max_steps_per_episode,
             metadata=metadata or {}
         )
 
-    def _create_error_observation(self, error_message: str) -> HallucinationObservation:
+    def _create_error_observation(self, error_message: str) -> DataCleaningObservation:
         """Create an error observation."""
-        return HallucinationObservation(
-            done=True,
-            reward=0.0,
-            question="",
-            context="",
-            feedback=f"Error: {error_message}",
-            is_hallucination=False,
-            grounding_score=0.0,
-            accuracy_so_far=0.0,
-            attempts_remaining=0,
-            reward_breakdown=None,
-            semantic_analysis=None,
-            citation_analysis=None,
+        return DataCleaningObservation(
+            done=False,
+            reward=-0.1,
+            message=f"Error: {error_message}",
+            step_count=self.step_count,
+            task_id=self.current_task_id,
             metadata={"error": error_message}
         )
 
-    def _end_episode(self) -> HallucinationObservation:
-        """End the current episode."""
+    def _end_episode(self) -> DataCleaningObservation:
+        """End the current episode and perform final grading."""
+        self.episode_phase = EpisodePhase.GRADING
+        
+        # Calculate final grade
+        final_score = grade_task_result(
+            initial_df=self.initial_df,
+            final_df=self.df,
+            task_id=self.current_task_id,
+            step_count=self.step_count
+        )
+        
         self.episode_phase = EpisodePhase.COMPLETION
-
-        # Update curriculum
-        self._update_curriculum()
-
-        return HallucinationObservation(
+        
+        return DataCleaningObservation(
             done=True,
-            reward=sum(self.reward_history) / max(1, len(self.reward_history)),
-            question="",
-            context="",
-            feedback=self._generate_episode_summary(),
-            is_hallucination=False,
-            grounding_score=0.0,
-            accuracy_so_far=self.total_correct / max(1, self.step_count),
-            attempts_remaining=0,
+            reward=final_score,
+            message=f"Episode completed. Final score: {final_score:.4f}",
+            step_count=self.step_count,
+            task_id=self.current_task_id,
+            quality_score=calculate_dataset_quality_score(self.df, self.current_task_id),
             metadata={
                 "episode_complete": True,
-                "final_reward": sum(self.reward_history) / max(1, len(self.reward_history)),
-                "total_hallucinations": self.total_hallucinations,
-                "total_correct": self.total_correct,
+                "final_score": final_score,
             }
         )
 
-    def _check_early_stopping(self, is_hallucination: bool, correctness: float, calibration_error: float) -> Optional[str]:
+    def _check_early_stopping(self) -> Optional[str]:
         """
         Check if episode should stop early based on performance conditions.
 
@@ -768,263 +577,24 @@ class HallucinationEnvironment(Environment[HallucinationAction, HallucinationObs
         """
         if not self.config.early_stopping_enabled:
             return None
-
+            
         # Require minimum steps before early stopping
         if self.step_count < 3:
             return None
 
-        # 1. Hallucination cascade: too many consecutive hallucinations
-        if self.consecutive_hallucinations >= self.config.early_stopping_hallucination_cascade:
-            return f"hallucination_cascade ({self.consecutive_hallucinations} consecutive)"
-
-        # 2. Consecutive failures: poor performance
-        if self.consecutive_failures >= self.config.early_stopping_patience:
-            return f"consecutive_failures ({self.consecutive_failures} below {self.config.early_stopping_min_reward})"
-
-        # 3. Calibration failure: confidence systematically misaligned
-        if len(self.calibration_history) >= 5:
-            avg_calibration_error = sum(self.calibration_history[-5:]) / 5
-            if avg_calibration_error > self.config.early_stopping_calibration_failure:
-                return f"calibration_failure (avg error: {avg_calibration_error:.2f})"
-
-        # 4. Perfect run: early completion after consistent high performance
-        if self.consecutive_perfect >= self.config.early_stopping_perfect_run:
-            if self.step_count >= self.config.min_questions_for_completion:
-                return f"perfect_run ({self.consecutive_perfect} consecutive correct)"
+        # 1. No improvement after multiple steps
+        if len(self.quality_history) >= 5:
+            recent_quality = self.quality_history[-5:]
+            if max(recent_quality) == min(recent_quality):
+                return "no_improvement"
+        
+        # 2. Too many repeated actions
+        if self.consecutive_repeated_actions >= 3:
+            return "repeated_actions"
+            
+        # 3. Perfect quality achieved early
+        current_quality = self.quality_history[-1] if self.quality_history else 0.0
+        if current_quality >= 0.95:
+            return "perfect_quality"
 
         return None
-
-    def _get_context_for_observation(self, example: Optional[QAExample]) -> str:
-        """Get context, potentially with partial revelation for challenges."""
-        if not example:
-            return ""
-
-        # Check if context retrieval is enabled
-        if self.config.enable_multi_turn and self.revealed_context_fragments:
-            return " ".join(self.revealed_context_fragments)
-
-        return example.context
-
-    def _get_current_difficulty(self) -> DifficultyLevel:
-        """
-        Determine current difficulty based on performance with hysteresis.
-
-        Uses smooth difficulty scaling with:
-        - Stage-specific thresholds
-        - Minimum steps at each level (hysteresis)
-        - EXPERT level progression
-        """
-        if not self.config.adaptive_difficulty:
-            return self.config.initial_difficulty
-
-        # Need enough history for reliable assessment
-        if len(self.reward_history) < 3:
-            return self.config.initial_difficulty
-
-        # Calculate recent performance with exponential weighting
-        recent_rewards = self.reward_history[-10:] if len(self.reward_history) >= 10 else self.reward_history
-        avg_recent_reward = sum(recent_rewards) / len(recent_rewards)
-
-        # Get current difficulty from example
-        current_difficulty = self.config.initial_difficulty
-        if self.current_example:
-            # Convert string to DifficultyLevel enum if needed
-            example_diff = self.current_example.difficulty
-            if isinstance(example_diff, str):
-                try:
-                    current_difficulty = DifficultyLevel(example_diff.lower())
-                except ValueError:
-                    current_difficulty = self.config.initial_difficulty
-            else:
-                current_difficulty = example_diff
-
-        # Stage-specific mastery thresholds
-        mastery_thresholds = {
-            DifficultyLevel.BEGINNER: 0.60,
-            DifficultyLevel.INTERMEDIATE: 0.65,
-            DifficultyLevel.ADVANCED: 0.75,
-            DifficultyLevel.EXPERT: 0.85,
-        }
-
-        # Regression thresholds (lower than mastery to avoid oscillation)
-        regression_thresholds = {
-            DifficultyLevel.BEGINNER: 0.30,
-            DifficultyLevel.INTERMEDIATE: 0.40,
-            DifficultyLevel.ADVANCED: 0.50,
-            DifficultyLevel.EXPERT: 0.60,
-        }
-
-        # Difficulty progression order
-        difficulty_order = [
-            DifficultyLevel.BEGINNER,
-            DifficultyLevel.INTERMEDIATE,
-            DifficultyLevel.ADVANCED,
-            DifficultyLevel.EXPERT,
-        ]
-
-        current_idx = difficulty_order.index(current_difficulty) if current_difficulty in difficulty_order else 0
-
-        # Check for promotion
-        if avg_recent_reward > mastery_thresholds.get(current_difficulty, 0.7):
-            # Promote if not at EXPERT
-            if current_idx < len(difficulty_order) - 1:
-                return difficulty_order[current_idx + 1]
-
-        # Check for demotion
-        elif avg_recent_reward < regression_thresholds.get(current_difficulty, 0.4):
-            # Demote if not at BEGINNER
-            if current_idx > 0:
-                return difficulty_order[current_idx - 1]
-
-        return current_difficulty
-
-    def _update_curriculum(self) -> None:
-        """
-        Update curriculum stage based on episode performance.
-
-        Supports:
-        - Advancement on sustained high performance
-        - Regression on sustained poor performance
-        - Stage-specific thresholds
-        """
-        if not self.config.curriculum_enabled:
-            return
-
-        episode_reward = sum(self.reward_history) / max(1, len(self.reward_history))
-        self.curriculum_performance.append(episode_reward)
-
-        # Calculate statistics
-        avg_reward = sum(self.curriculum_performance) / len(self.curriculum_performance)
-        recent_rewards = self.curriculum_performance[-10:] if len(self.curriculum_performance) >= 10 else self.curriculum_performance
-        recent_avg = sum(recent_rewards) / len(recent_rewards)
-
-        # Stage-specific thresholds
-        advancement_threshold = self.config.curriculum_mastery_threshold
-        regression_threshold = self.config.curriculum_regression_threshold
-
-        # Check for curriculum advancement (sustained high performance)
-        if len(self.curriculum_performance) >= self.config.min_steps_per_curriculum_stage:
-            if recent_avg > advancement_threshold:
-                self.curriculum_stage += 1
-                self.curriculum_performance = []  # Reset for next stage
-                logger.info(f"Advanced to curriculum stage {self.curriculum_stage} (avg: {recent_avg:.2f})")
-
-            # Check for curriculum regression (sustained poor performance)
-            elif recent_avg < regression_threshold and self.curriculum_stage > 0:
-                self.curriculum_stage = max(0, self.curriculum_stage - 1)
-                self.curriculum_performance = []
-                logger.info(f"Regressed to curriculum stage {self.curriculum_stage} (avg: {recent_avg:.2f})")
-
-    def _update_agent_profile(self) -> None:
-        """Update the agent's long-term skill profile."""
-        if not self.agent_profile:
-            self.agent_profile = AgentSkillProfile()
-
-        # Update metrics
-        total_steps = self.agent_profile.total_steps + self.step_count
-        weight = self.step_count / max(1, total_steps)
-
-        self.agent_profile.overall_accuracy = (
-            (1 - weight) * self.agent_profile.overall_accuracy +
-            weight * (self.total_correct / max(1, self.step_count))
-        )
-        self.agent_profile.grounding_skill = (
-            (1 - weight) * self.agent_profile.grounding_skill +
-            weight * sum(self.reward_history) / max(1, len(self.reward_history))
-        )
-        self.agent_profile.hallucination_rate = (
-            (1 - weight) * self.agent_profile.hallucination_rate +
-            weight * (self.total_hallucinations / max(1, self.step_count))
-        )
-        self.agent_profile.total_episodes += 1
-        self.agent_profile.total_steps = total_steps
-
-        # Update difficulty ceiling
-        if self.agent_profile.overall_accuracy > 0.8:
-            self.agent_profile.difficulty_ceiling = DifficultyLevel.EXPERT
-        elif self.agent_profile.overall_accuracy > 0.6:
-            self.agent_profile.difficulty_ceiling = DifficultyLevel.ADVANCED
-        elif self.agent_profile.overall_accuracy > 0.4:
-            self.agent_profile.difficulty_ceiling = DifficultyLevel.INTERMEDIATE
-        else:
-            self.agent_profile.difficulty_ceiling = DifficultyLevel.BEGINNER
-
-    def _generate_episode_summary(self) -> str:
-        """Generate a summary of the completed episode."""
-        total_reward = sum(self.reward_history) / max(1, len(self.reward_history))
-        accuracy = self.total_correct / max(1, self.step_count)
-
-        summary_parts = [
-            f"Episode completed!",
-            f"Total reward: {total_reward:.2f}",
-            f"Accuracy: {accuracy:.1%}",
-            f"Hallucinations: {self.total_hallucinations}/{self.step_count}",
-            f"Best streak: {self.best_streak}",
-        ]
-
-        if total_reward > 0.8:
-            summary_parts.append("Performance: OUTSTANDING!")
-        elif total_reward > 0.6:
-            summary_parts.append("Performance: Good")
-        elif total_reward > 0.4:
-            summary_parts.append("Performance: Needs improvement")
-        else:
-            summary_parts.append("Performance: Poor - review and recalibrate")
-
-        return " ".join(summary_parts)
-
-    def _extract_reward_breakdown(self, info: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract reward breakdown from grader info."""
-        components = info.get("components", {})
-        return {
-            "factual_correctness": info.get("correctness", 0.0),
-            "source_grounding": info.get("grounding", 0.0),
-            "citation_accuracy": info.get("citation_analysis", {}).get("best_match_score", 0.0),
-            "confidence_calibration": info.get("calibration", 0.0),
-            "semantic_consistency": info.get("semantic_consistency", 0.0),
-            "hallucination_penalty": info.get("hallucination_penalty", 0.0),
-            "rouge_l": info.get("rouge_combined", 0.0),
-            "bert_score": info.get("bertscore", {}).get("f1", 0.0) if isinstance(info.get("bertscore"), dict) else info.get("bertscore", 0.0),
-            "align_score": info.get("alignscore", 0.0),
-            "rouge_contrib": info.get("rouge_contrib", 0.0),
-            "bertscore_contrib": info.get("bertscore_contrib", 0.0),
-            "alignscore_contrib": info.get("alignscore_contrib", 0.0),
-            "total": info.get("total_reward", 0.0),
-            "difficulty_adjustment": info.get("difficulty_multiplier", 1.0),
-            "consistency_bonus": info.get("consistency_bonus", 0.0),
-        }
-
-    def _split_context_into_fragments(self, context: str, num_fragments: int = 5) -> List[str]:
-        """Split context into fragments for retrieval challenges."""
-        if not context:
-            return []
-
-        sentences = context.split('.')
-        fragments = []
-        chunk_size = max(1, len(sentences) // num_fragments)
-
-        for i in range(0, len(sentences), chunk_size):
-            fragment = '.'.join(sentences[i:i + chunk_size]).strip()
-            if fragment:
-                fragments.append(fragment + '.')
-
-        return fragments or [context]
-
-    def _generate_clarification(self, question: str, example: Optional[QAExample]) -> str:
-        """Generate a clarification response."""
-        if not example:
-            return "No context available for clarification."
-
-        # Simple keyword-based clarification
-        context_lower = example.context.lower()
-        question_lower = question.lower()
-
-        # Extract key terms from question
-        key_terms = [w for w in question_lower.split() if len(w) > 3 and w not in {'what', 'when', 'where', 'who', 'why', 'how', 'does', 'have', 'has', 'with', 'from'}]
-
-        clarifications = []
-        for term in key_terms[:3]:
-            if term in context_lower:
-                clarifications.append(f"Context mentions '{term}'")
-
-        return "; ".join(clarifications) if clarifications else "Review the provided context for relevant information."
