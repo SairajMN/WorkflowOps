@@ -16,3 +16,6 @@ dependencies = [
 
 [tool.openenv]
 version = ">=0.2.0"
+
+[project.scripts]
+server = "server.app:main"
