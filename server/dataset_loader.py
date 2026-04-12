@@ -27,6 +27,10 @@ class DatasetGenerator:
     def __init__(self):
         self.fake = Faker()
         self.seed = None
+    
+    def get_total_examples(self):
+        """Required method for OpenEnv compatibility."""
+        return 3
         
     def generate_dataset(self, task_id: str, seed: int = None) -> pd.DataFrame:
         """Generate dataset for specified task."""
@@ -96,8 +100,8 @@ class DatasetGenerator:
         # Add null values (20% of rows)
         null_mask = np.random.choice([True, False], size=n_rows, p=[0.20, 0.80])
         df.loc[null_mask, 'age'] = np.nan
-        df.loc[null_mask[:n_rows//2], 'salary'] = np.nan
-        df.loc[null_mask[:n_rows//3], 'department'] = np.nan
+        df.loc[df.index[null_mask][:n_rows//2], 'salary'] = np.nan
+        df.loc[df.index[null_mask][:n_rows//3], 'department'] = np.nan
         
         # Add duplicates (15% of rows)
         n_duplicates = int(n_rows * 0.15)
@@ -107,13 +111,17 @@ class DatasetGenerator:
         
         # Add invalid emails (25% of emails)
         invalid_email_mask = np.random.choice([True, False], size=len(df), p=[0.25, 0.75])
-        df.loc[invalid_email_mask, 'email'] = [
-            self.fake.user_name(),
-            'not_an_email',
-            'missing@domain',
-            'user@.com',
-            '@missinguser.com'
-        ][np.random.randint(0, 5)]
+        invalid_count = np.sum(invalid_email_mask)
+        invalid_values = [
+            [
+                self.fake.user_name(),
+                'not_an_email',
+                'missing@domain',
+                'user@.com',
+                '@missinguser.com'
+            ][np.random.randint(0, 5)] for _ in range(invalid_count)
+        ]
+        df.loc[invalid_email_mask, 'email'] = invalid_values
         
         # Add outliers in salary column
         outlier_indices = np.random.choice(df.index, size=int(len(df) * 0.10), replace=False)
